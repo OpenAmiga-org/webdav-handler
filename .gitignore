@@ -1,0 +1,8 @@
+/build/
+/dist/*.lha
+/dist/stage/
+/testserver/local/
+*.o
+*.d
+*.debug
+__pycache__/
