@@ -29,6 +29,9 @@ struct dav_session {
 	char       *root_dec;     /* decoded root_path */
 	char       *root_url;     /* origin + root_path + "/" */
 	int         nextcloud;
+	char       *uploads_url;  /* Nextcloud chunked upload folder, or NULL */
+	int64_t     chunk_size;
+	unsigned    upload_seq;
 
 	char        curlerr[CURL_ERROR_SIZE];
 	char        errmsg[512];
@@ -44,6 +47,7 @@ typedef struct {
 	const char        *body;
 	size_t             body_len;
 	tmpf              *upload;
+	int64_t            upload_base; /* offset of the part to send */
 	int64_t            upload_size;
 	int64_t            upload_pos;
 	long               timeout;     /* overrides io_timeout */
@@ -93,6 +97,9 @@ dav_session *dav_new(const dav_config *cfg)
 	s->insecure = cfg->insecure;
 	s->connect_timeout = cfg->connect_timeout > 0 ? cfg->connect_timeout : 20;
 	s->io_timeout = cfg->io_timeout > 0 ? cfg->io_timeout : 60;
+	s->chunk_size = cfg->chunk_size > 0 ? cfg->chunk_size : (int64_t)16 * 1024 * 1024;
+	if (s->chunk_size < (int64_t)5 * 1024 * 1024)
+		s->chunk_size = (int64_t)5 * 1024 * 1024; /* Nextcloud minimum */
 	if (s->curl == NULL || s->url == NULL) {
 		dav_free(s);
 		return NULL;
@@ -117,6 +124,7 @@ void dav_free(dav_session *s)
 	free(s->root_path);
 	free(s->root_dec);
 	free(s->root_url);
+	free(s->uploads_url);
 	free(s);
 }
 
@@ -283,7 +291,7 @@ static size_t on_read(char *buf, size_t size, size_t n, void *ud)
 		return 0;
 	if ((int64_t)want > r->upload_size - r->upload_pos)
 		want = (size_t)(r->upload_size - r->upload_pos);
-	got = tmpf_pread(r->upload, buf, want, r->upload_pos);
+	got = tmpf_pread(r->upload, buf, want, r->upload_base + r->upload_pos);
 	if (got < 0)
 		return CURL_READFUNC_ABORT;
 	r->upload_pos += got;
@@ -628,6 +636,23 @@ static int set_root(dav_session *s, const char *root_path)
 	sb_init(&sb);
 	sb_printf(&sb, "%s%s/", s->origin, root_path);
 	s->root_url = sb_steal(&sb);
+
+	/* /remote.php/dav/files/<user>[/...] -> /remote.php/dav/uploads/<user> */
+	free(s->uploads_url);
+	s->uploads_url = NULL;
+	{
+		const char *key = "/remote.php/dav/files/";
+		const char *k = strstr(root_path, key);
+		if (k != NULL) {
+			const char *uid = k + strlen(key);
+			const char *end = strchr(uid, '/');
+			size_t ulen = end != NULL ? (size_t)(end - uid) : strlen(uid);
+			sb_init(&sb);
+			sb_printf(&sb, "%s%.*s/remote.php/dav/uploads/%.*s", s->origin,
+			          (int)(k - root_path), root_path, (int)ulen, uid);
+			s->uploads_url = sb_steal(&sb);
+		}
+	}
 	return s->root_path && s->root_dec && s->root_url ? 0 : -ENOMEM;
 }
 
@@ -776,7 +801,8 @@ int dav_get_file(dav_session *s, const char *path, tmpf *f)
 	return err;
 }
 
-int dav_put_file(dav_session *s, const char *path, tmpf *f, time_t mtime)
+static int put_single(dav_session *s, const char *path, tmpf *f, int64_t size,
+                      time_t mtime)
 {
 	dav_req r;
 	char hdr[64];
@@ -784,9 +810,7 @@ int dav_put_file(dav_session *s, const char *path, tmpf *f, time_t mtime)
 
 	req_init(&r, "PUT", path);
 	r.upload = f;
-	r.upload_size = tmpf_size(f);
-	if (r.upload_size < 0)
-		return -EIO;
+	r.upload_size = size;
 	/* the server may need a while to store a big file after receiving it */
 	r.timeout = s->io_timeout > 300 ? s->io_timeout : 300;
 	r.headers = curl_slist_append(NULL, "Content-Type: application/octet-stream");
@@ -799,6 +823,138 @@ int dav_put_file(dav_session *s, const char *path, tmpf *f, time_t mtime)
 		err = set_http_error(s, &r);
 	req_done(&r);
 	return err;
+}
+
+/* Nextcloud chunked upload (v2): MKCOL an upload folder, PUT numbered
+ * parts into it, then MOVE its ".file" to the destination. Servers and
+ * proxies often refuse single requests above some size (the Nextcloud
+ * Docker image: 1 GiB), the official clients upload like this. */
+static int put_chunked(dav_session *s, const char *path, tmpf *f, int64_t size,
+                       time_t mtime, int *unsupported)
+{
+	char *dest = NULL, *folder = NULL;
+	struct curl_slist *h;
+	strbuf sb;
+	dav_req r;
+	char hdr[64];
+	int64_t off;
+	int err, n;
+
+	*unsupported = 0;
+	dest = make_url(s, path, 0);
+	sb_init(&sb);
+	sb_printf(&sb, "%s/nch-%lx-%x-%x", s->uploads_url, (unsigned long)plat_time(),
+	          ++s->upload_seq, (unsigned)(plat_ms() & 0xFFFFF));
+	folder = sb_steal(&sb);
+	if (dest == NULL || folder == NULL) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+#define DEST_HEADER(list) do { \
+		strbuf hb; sb_init(&hb); sb_printf(&hb, "Destination: %s", dest); \
+		list = curl_slist_append(list, hb.data); sb_free(&hb); } while (0)
+
+	req_init(&r, "MKCOL", NULL);
+	r.url = folder;
+	h = NULL;
+	DEST_HEADER(h);
+	r.headers = h;
+	err = perform(s, &r);
+	if (err == 0 && r.status != 201) {
+		/* no chunked upload here (old server, or uploads disabled) */
+		*unsupported = (r.status == 404 || r.status == 405 || r.status == 501);
+		err = set_http_error(s, &r);
+	}
+	req_done(&r);
+	if (err != 0)
+		goto out;
+
+	for (off = 0, n = 1; off < size; off += s->chunk_size, n++) {
+		char url[1024];
+		int64_t len = size - off < s->chunk_size ? size - off : s->chunk_size;
+
+		snprintf(url, sizeof(url), "%s/%05d", folder, n);
+		req_init(&r, "PUT", NULL);
+		r.url = url;
+		r.upload = f;
+		r.upload_base = off;
+		r.upload_size = len;
+		h = curl_slist_append(NULL, "Content-Type: application/octet-stream");
+		DEST_HEADER(h);
+		snprintf(hdr, sizeof(hdr), "OC-Total-Length: %lld", (long long)size);
+		h = curl_slist_append(h, hdr);
+		r.headers = h;
+		plat_log(LOG_DEBUG, "chunk %d of %s (%lld bytes)\n", n, path, (long long)len);
+		err = perform(s, &r);
+		if (err == 0 && (r.status < 200 || r.status >= 300))
+			err = set_http_error(s, &r);
+		req_done(&r);
+		if (err != 0)
+			goto cancel;
+	}
+
+	{
+		char url[1024];
+
+		snprintf(url, sizeof(url), "%s/.file", folder);
+		req_init(&r, "MOVE", NULL);
+		r.url = url;
+		/* assembling a big file can take the server a while */
+		r.timeout = s->io_timeout > 600 ? s->io_timeout : 600;
+		h = NULL;
+		DEST_HEADER(h);
+		h = curl_slist_append(h, "Overwrite: T");
+		snprintf(hdr, sizeof(hdr), "OC-Total-Length: %lld", (long long)size);
+		h = curl_slist_append(h, hdr);
+		if (mtime != 0) {
+			snprintf(hdr, sizeof(hdr), "X-OC-Mtime: %lld", (long long)mtime);
+			h = curl_slist_append(h, hdr);
+		}
+		r.headers = h;
+		err = perform(s, &r);
+		if (err == 0 && (r.status < 200 || r.status >= 300))
+			err = set_http_error(s, &r);
+		req_done(&r);
+		if (err == 0)
+			goto out;
+	}
+#undef DEST_HEADER
+
+cancel:
+	{
+		char saved[sizeof(s->errmsg)];
+
+		/* keep the first error, remove the unfinished upload */
+		memcpy(saved, s->errmsg, sizeof(saved));
+		req_init(&r, "DELETE", NULL);
+		r.url = folder;
+		perform(s, &r);
+		req_done(&r);
+		memcpy(s->errmsg, saved, sizeof(saved));
+	}
+out:
+	free(dest);
+	free(folder);
+	return err;
+}
+
+int dav_put_file(dav_session *s, const char *path, tmpf *f, time_t mtime)
+{
+	int64_t size = tmpf_size(f);
+	int unsupported = 0, err;
+
+	if (size < 0)
+		return -EIO;
+	if (s->uploads_url != NULL && size > s->chunk_size) {
+		err = put_chunked(s, path, f, size, mtime, &unsupported);
+		if (!unsupported)
+			return err;
+		plat_log(LOG_INFO, "chunked upload not available, using one request\n");
+		free(s->uploads_url);
+		s->uploads_url = NULL;
+	}
+	return put_single(s, path, f, size, mtime);
 }
 
 /* --- simple methods -------------------------------------------------- */

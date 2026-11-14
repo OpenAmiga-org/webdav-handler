@@ -18,6 +18,7 @@ typedef struct {
 	int         insecure;        /* do not verify the server certificate */
 	long        connect_timeout; /* seconds */
 	long        io_timeout;      /* seconds without progress */
+	int64_t     chunk_size;      /* Nextcloud chunked upload above this, 0 = 16 MB */
 	const char *user_agent;
 } dav_config;
 
