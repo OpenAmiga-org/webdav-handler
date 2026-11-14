@@ -41,13 +41,15 @@ fi
 if [ ! -f "$LOCAL/ca.crt" ]; then
 	openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
 		-keyout "$LOCAL/ca.key" -out "$LOCAL/ca.crt" \
-		-subj "/CN=nextcloud_client test CA" >/dev/null 2>&1
+		-subj "/CN=nextcloud_client test CA" \
+		-addext "basicConstraints=critical,CA:TRUE" \
+		-addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
 fi
 if [ ! -f "$LOCAL/server.crt" ]; then
 	openssl req -newkey rsa:2048 -nodes \
 		-keyout "$LOCAL/server.key" -out "$LOCAL/server.csr" \
 		-subj "/CN=localhost" >/dev/null 2>&1
-	printf 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:10.0.2.2\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' > "$LOCAL/server.ext"
+	printf 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:10.0.2.2\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nauthorityKeyIdentifier=keyid\nsubjectKeyIdentifier=hash\n' > "$LOCAL/server.ext"
 	openssl x509 -req -in "$LOCAL/server.csr" -CA "$LOCAL/ca.crt" -CAkey "$LOCAL/ca.key" \
 		-CAcreateserial -days 3650 -extfile "$LOCAL/server.ext" -out "$LOCAL/server.crt" >/dev/null 2>&1
 fi
