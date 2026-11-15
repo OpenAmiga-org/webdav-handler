@@ -389,6 +389,11 @@ it in Nextcloud at any time.
 @node History "History"
 @{b}History@{ub}
 
+@{b}0.37 (15.11.2026)@{ub}
+   - Converting an empty text between the Amiga character set and UTF-8
+     could give leftover memory instead of an empty text (no case is
+     known where the handler showed it).
+
 @{b}0.32 (15.11.2026)@{ub}
    - Reading stops with an error when the file is changed on the server
      during the read, instead of giving a mix of both versions.

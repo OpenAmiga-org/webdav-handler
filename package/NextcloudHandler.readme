@@ -58,5 +58,21 @@ handler to L:, creates a DOSDriver with your server address and user name
 and can mount the volume right away. Everything else is described in
 NextcloudHandler.guide.
 
+History:
+
+- 0.37 (2026-11-15): converting an empty text between the Amiga character
+  set and UTF-8 could give leftover memory instead of an empty text (no
+  case is known where the handler showed it).
+- 0.32 (2026-11-15): reading stops with an error when the file is changed
+  on the server during the read, instead of giving a mix of both versions.
+  The handler's code is freed when the volume is dismounted (about 3 MB
+  were lost with every mount). Problems that need the user, such as
+  certificate errors, are shown in a requester once. Names with ":" from
+  the server can be used (shown as %u003A). Files show the e bit, so
+  programs on the volume can be started. Line breaks in requesters are
+  shown correctly. Files over 2 GiB can be written with TEMPDIR on an FFS
+  partition.
+- 0.25 (2026-11-15): first test version.
+
 nextcloud-handler is public domain. It uses libcurl, expat, zlib, clib4
 and AmiSSL, see Third-party.txt for their licences.

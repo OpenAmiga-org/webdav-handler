@@ -34,6 +34,17 @@ if ! strings "$bin" | grep -c "nextcloud-handler $ver " > /dev/null; then
 	exit 1
 fi
 
+# every release says what changed: the readme and the guide need an entry
+# for this version
+if ! grep -q "^- $ver (" "$ROOT/package/NextcloudHandler.readme"; then
+	echo "package/NextcloudHandler.readme has no History entry \"- $ver (...)\"" >&2
+	exit 1
+fi
+if ! grep -q "^@{b}$ver (" "$ROOT/package/NextcloudHandler/NextcloudHandler.guide"; then
+	echo "NextcloudHandler.guide has no History entry for $ver" >&2
+	exit 1
+fi
+
 rm -rf "$STAGE"
 D="$STAGE/NextcloudHandler"
 mkdir -p "$D/L" "$D/Devs/DOSDrivers" "$ROOT/dist"
