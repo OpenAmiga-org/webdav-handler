@@ -74,6 +74,8 @@ extern struct MsgPort *rpc_worker_port;      /* main.c receives here */
 extern int fbx_utf8_names;
 int  fbx_start(struct DosPacket *startup_pkt, const char *device,
                const char *volume, int readonly);
+/* waits until the filesysbox process has ended (after OP_FSDONE) */
+void fbx_wait(void);
 void fbx_stop(void);
 
 /* main.c */

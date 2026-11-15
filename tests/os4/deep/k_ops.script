@@ -11,7 +11,7 @@ Rename NC1:ops/f$n NC1:ops/g$n QUIET
 Type NC1:ops/g$n >NIL:
 Delete NC1:ops/g$n QUIET
 Set n `Eval $n + 1`
-If $n LT 200
+If VAL $n LT 200
   Skip loop BACK
 EndIf
 Echo "== ops done: $n x 5"

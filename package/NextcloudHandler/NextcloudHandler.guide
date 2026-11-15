@@ -318,7 +318,16 @@ it in Nextcloud at any time.
 @{b}Limits@{ub}
 
   - Protection bits (s, p, a, h and rwed) are not stored on the server.
-    Setting them is accepted but has no effect.
+    Setting them is accepted but has no effect. Every file shows as
+    readable, writable, executable and deletable, so programs on the
+    volume can be started. Scripts need "Execute", because the s bit is
+    not kept.
+  - Renaming that only changes upper and lower case ("hello" to "Hello")
+    fails with "object already exists" with filesysbox.library 54.9.
+    Rename it to another name first, then to the new one.
+  - Names with characters the Amiga cannot show (other alphabets, emoji,
+    and ":") appear as %uXXXX, for example "12%u003A30" for "12:30".
+    They can be opened and renamed as usual.
   - Links are not supported.
   - Changes made on the server by other devices show up after CACHETIME
     seconds (and within a minute in a drawer you are writing to).
@@ -342,6 +351,24 @@ it in Nextcloud at any time.
 @{b}"No disk in drive"@{ub}
    The server could not be reached or the login failed. Check the URL,
    the network, and the user name and password (see @{"Password" link Password}).
+   While the server cannot be reached, the volume shows "no disk" and the
+   handler tries again on the next access. A transfer that gets no data
+   for TIMEOUT seconds (60 by default) also ends this way.
+
+   Problems that will not go away by themselves, such as a certificate
+   that cannot be checked or a URL that is not a WebDAV folder, are
+   shown once in a requester. After fixing the DOSDriver, use
+   "DiskChange NC0:" or mount the volume again.
+
+@{b}"Object is in use" while reading a file@{ub}
+   The file was changed on the server while it was being read. The read
+   stops instead of mixing the old and the new version; copy the file
+   again.
+
+@{b}"Upload failed" requester@{ub}
+   A file could not be saved on the server (network gone, server full,
+   quota reached). Its data was kept in KEEPDIR (TEMPDIR if not set), as
+   the requester says. Copy it to the volume again when the server works.
 
 @{b}Certificate errors@{ub}
    See @{"Security" link Security}.
@@ -360,8 +387,19 @@ it in Nextcloud at any time.
 @node History "History"
 @{b}History@{ub}
 
+@{b}0.31 (15.11.2026)@{ub}
+   - Reading stops with an error when the file is changed on the server
+     during the read, instead of giving a mix of both versions.
+   - The handler's code is freed when the volume is dismounted (about
+     3 MB were lost with every mount before).
+   - Problems that need the user, such as certificate errors, are shown
+     in a requester once.
+   - Names with ":" from the server can be used (shown as %u003A).
+   - Files show the e bit, so programs on the volume can be started.
+   - Line breaks in requesters are shown correctly.
+
 @{b}0.25 (15.11.2026)@{ub}
-   First release.
+   First test version.
 
 @endnode
 

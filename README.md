@@ -48,5 +48,15 @@ The OS4 build needs the cross-compiler image
 - Writes go to a temp file and are uploaded on Close (Nextcloud chunked
   upload above 16 MB). filesysbox ignores errors from Close, so a failed
   upload opens a requester and the data is kept.
+- Reads use HTTP ranges. The ETag of the first block goes with every later
+  block as If-Match, so a file changed on the server during a read gives
+  an error (ETXTBSY, "object is in use") instead of mixed data.
+- DOS keeps a handler's code in `dn_SegList` and never unloads it when the
+  device is removed. The handler takes the seglist out of the device node
+  at startup and sets PRF_FREESEGLIST, so its code goes when it ends; the
+  filesysbox process is a child (`NP_Child`) that the handler waits for.
+- Deep tests in the AmigaOS 4 guest: `docs/deep_test_plan.md`,
+  `tests/os4/` (nchtest, nametest, gentree, scripts in `deep/`) and
+  `tests/hostmount.sh` to check the server side from Linux.
 
 Public domain, see `UNLICENSE`.

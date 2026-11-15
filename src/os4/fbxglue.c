@@ -97,7 +97,9 @@ static void fill_stat(const ncfs_stat *ns, struct fbx_stat *st)
 	if (ns->is_dir)
 		st->st_mode = S_IFDIR | (ns->readonly || readonly_vol ? 0555 : 0755);
 	else
-		st->st_mode = S_IFREG | (ns->readonly || readonly_vol ? 0444 : 0644);
+		/* protection bits are not stored on the server; with "e" set,
+		 * programs on the volume can be started */
+		st->st_mode = S_IFREG | (ns->readonly || readonly_vol ? 0555 : 0755);
 	st->st_nlink = 1;
 	st->st_size = ns->size;
 	st->st_mtime = ns->mtime;
@@ -424,6 +426,8 @@ static struct fuse_operations nc_ops = {
 
 /* --- the filesysbox process -------------------------------------------- */
 
+static uint32 fbx_pid;
+
 static int32 fbx_process(STRPTR args, int32 len, struct ExecBase *sysbase)
 {
 	struct FbxFS *fs;
@@ -491,9 +495,19 @@ int fbx_start(struct DosPacket *pkt, const char *device, const char *volume, int
 		NP_CloseError,  FALSE,
 		NP_CurrentDir,  ZERO,
 		NP_Cli,         FALSE,
-		NP_Child,       FALSE,
+		NP_Child,       TRUE,
 		TAG_END);
-	return proc != NULL ? 0 : -1;
+	if (proc == NULL)
+		return -1;
+	fbx_pid = IDOS->GetPID(proc, GPID_PROCESS);
+	return 0;
+}
+
+void fbx_wait(void)
+{
+	if (fbx_pid != 0)
+		IDOS->WaitForChildExit(fbx_pid);
+	fbx_pid = 0;
 }
 
 void fbx_stop(void)

@@ -10,7 +10,7 @@ If WARN
   Echo "list failed in cycle $n"
 EndIf
 Set n `Eval $n + 1`
-If $n LT 20
+If VAL $n LT 20
   Skip loop BACK
 EndIf
 Echo "== cycles done: $n"

@@ -570,6 +570,26 @@ static void serve_requests(void)
 	}
 }
 
+/* DOS keeps a handler's code in dn_SegList for its next start, and removing
+ * the device does not unload it: about 3 MB lost with every mount. Instead
+ * this process frees its code when it ends, and DOS loads it again for a
+ * later start. Returns 1 when the code was taken over. */
+static int take_seglist(struct DeviceNode *dn)
+{
+	struct Process *me = (struct Process *)IExec->FindTask(NULL);
+	BPTR seg = IDOS->GetProcSegList(me, GPSLF_SEG);
+	int taken = 0;
+
+	IExec->Forbid();
+	if (seg != ZERO && dn->dn_SegList == seg && (me->pr_Flags & PRF_FREESEGLIST) == 0) {
+		dn->dn_SegList = ZERO;
+		me->pr_Flags |= PRF_FREESEGLIST;
+		taken = 1;
+	}
+	IExec->Permit();
+	return taken;
+}
+
 static int handler_main(struct DosPacket *pkt)
 {
 	struct DeviceNode *dn = (struct DeviceNode *)BADDR(pkt->dp_Arg3);
@@ -579,7 +599,9 @@ static int handler_main(struct DosPacket *pkt)
 	const char *startup = "";
 	char *capath_default = NULL;
 	int32 err;
+	int seg_taken;
 
+	seg_taken = take_seglist(dn);
 	memset(args, 0, sizeof(args));
 	memset(&g, 0, sizeof(g));
 	snprintf(g.device, sizeof(g.device), "%s", (const char *)BADDR(dn->dn_Name) + 1);
@@ -599,6 +621,7 @@ static int handler_main(struct DosPacket *pkt)
 
 	if (args[A_DEBUG])
 		plat_loglevel = LOG_DEBUG;
+	plat_log(LOG_DEBUG, "code %s\n", seg_taken ? "freed when the handler ends" : "kept by DOS");
 	snprintf(g.url, sizeof(g.url), "%s", (const char *)args[A_URL]);
 	if (args[A_USER])
 		snprintf(g.user, sizeof(g.user), "%s", (const char *)args[A_USER]);
@@ -679,6 +702,7 @@ static int handler_main(struct DosPacket *pkt)
 	plat_log(LOG_INFO, "file names: %s\n", g.convert ?
 	         "converted by the handler" : "converted by filesysbox");
 	serve_requests();
+	fbx_wait(); /* its code goes away with ours */
 	err = 0;
 
 fail:
