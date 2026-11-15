@@ -1,0 +1,62 @@
+name: NextcloudHandler
+description: Filesystem handler for Nextcloud and WebDAV servers
+version: @VERSION@
+date: @DATE@
+author: orgin
+submitter: orgin
+email:
+url:
+category: driver/handler
+replaces:
+requirements: clib4.library 2.5, AmiSSL 5, filesysbox.library 54.8
+license: Public domain
+minosversion: 4.1
+texttype: Plain text
+distribute: yes
+hend:
+
+nextcloud-handler shows the files of a Nextcloud account as a volume on
+AmigaOS 4, for example Nextcloud: on Workbench. Files can be opened,
+copied, renamed, deleted and saved directly on the server, from Workbench,
+the Shell and any program. It also works with ownCloud and other WebDAV
+servers.
+
+Features:
+
+- Encrypted connections (https) through AmiSSL, with certificate check.
+- Files of any size; big files are uploaded in parts (Nextcloud chunked
+  upload), so server limits on request size do not matter.
+- National characters in file names, converted between the Amiga
+  character set and UTF-8.
+- Upper and lower case are ignored, as on any Amiga volume.
+- File dates (Copy CLONE, SetDate) and comments (FileNote) are kept on the
+  server.
+- Free space from the Nextcloud quota.
+- The password can be asked for with a requester and remembered; use an
+  app password from the Nextcloud security settings.
+- The volume can be mounted at boot: it connects on first use and
+  reconnects by itself after network problems.
+- A failed upload is reported with a requester, and the data is kept
+  locally, so nothing is lost.
+
+Requirements (install these first):
+
+- AmigaOS 4.1 Final Edition (tested with Update 3).
+- filesysbox.library 54.8 or newer (part of AmigaOS 4.1 FE).
+- clib4.library 2.5 or newer:
+  OS4Depot development/library/misc/clib4.lha
+  or https://github.com/AmigaLabs/clib4/releases
+- AmiSSL 5 or newer:
+  OS4Depot library/misc/amissl.lha
+  or https://github.com/jens-maus/amissl/releases
+- A TCP/IP stack (Roadshow, as included in AmigaOS 4.1).
+
+Installation:
+
+Double-click the Install icon. It checks the requirements, copies the
+handler to L:, creates a DOSDriver with your server address and user name
+and can mount the volume right away. Everything else is described in
+NextcloudHandler.guide.
+
+nextcloud-handler is public domain. It uses libcurl, expat, zlib, clib4
+and AmiSSL, see Third-party.txt for their licences.

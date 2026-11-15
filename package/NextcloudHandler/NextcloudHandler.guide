@@ -1,0 +1,387 @@
+@database NextcloudHandler.guide
+@$VER: NextcloudHandler.guide 0.25 (15.11.2026)
+@author orgin
+@wordwrap
+@font topaz.font 8
+
+@node Main "Nextcloud Handler"
+
+                      @{b}Nextcloud Handler@{ub}
+
+     Your Nextcloud files as a volume on AmigaOS 4
+
+  @{" Introduction           " link Intro}  What it is and what it does
+  @{" Requirements           " link Requirements}  What you need first, and where to get it
+  @{" Installation           " link Install}  With the Install script or by hand
+  @{" App password           " link AppPassword}  Making a password for the Amiga in Nextcloud
+  @{" Settings               " link Settings}  The Startup line of the DOSDriver
+  @{" Password               " link Password}  How the handler gets your password
+  @{" Using the volume       " link Using}  What works and how
+  @{" Other WebDAV servers   " link WebDAV}  ownCloud and plain WebDAV
+  @{" Security               " link Security}  Certificates and stored passwords
+  @{" Limits                 " link Limits}  Things to know
+  @{" Troubleshooting        " link Trouble}  When something does not work
+  @{" History                " link History}
+  @{" Licence and credits    " link Licence}
+
+@endnode
+
+@node Intro "Introduction"
+@{b}Introduction@{ub}
+
+nextcloud-handler is a filesystem handler for AmigaOS 4. It connects to a
+Nextcloud server over the internet (or your local network) and shows your
+Nextcloud files as an ordinary volume, for example @{b}Nextcloud:@{ub}
+
+You can open the volume on Workbench, copy files to and from it, create
+drawers, rename and delete files, use it from the Shell and open files from
+it in any program. Everything happens directly on the server: there is no
+local copy and nothing to synchronise.
+
+It also works with ownCloud and most other WebDAV servers, see
+@{"Other WebDAV servers" link WebDAV}.
+
+@endnode
+
+@node Requirements "Requirements"
+@{b}Requirements@{ub}
+
+You need the following. Everything that is not part of AmigaOS 4.1 Final
+Edition must be installed before the handler can be used. The Install
+script checks the versions and tells you if something is missing.
+
+@{b}AmigaOS 4.1 Final Edition@{ub}
+   Tested with AmigaOS 4.1 Final Edition Update 3.
+
+@{b}filesysbox.library 54.8 or newer@{ub}
+   Part of AmigaOS 4.1 Final Edition (Update 3 has version 54.9).
+
+@{b}clib4.library 2.5 or newer@{ub}   (not part of AmigaOS)
+   The C library the handler is built with.
+   OS4Depot:  development/library/misc/clib4.lha
+      https://os4depot.net/?function=showfile&file=development/library/misc/clib4.lha
+   GitHub:    https://github.com/AmigaLabs/clib4/releases
+   Install it with the Install script in the archive.
+
+@{b}AmiSSL 5 or newer@{ub}   (not part of AmigaOS)
+   Used for the encrypted (https) connection to the server. Many users
+   have it already; check that LIBS:amisslmaster.library exists and that
+   "Version LIBS:amisslmaster.library" says 5.0 or newer.
+   OS4Depot:  library/misc/amissl.lha
+      https://os4depot.net/?function=showfile&file=library/misc/amissl.lha
+   GitHub:    https://github.com/jens-maus/amissl/releases
+   AmiSSL 6 works as well (it keeps the AmiSSL 5 libraries).
+
+@{b}A working TCP/IP connection@{ub}
+   Roadshow, as included in AmigaOS 4.1.
+
+@{b}A Nextcloud account@{ub}
+   The address of the server, your user name and an app password, see
+   @{"App password" link AppPassword}.
+
+@endnode
+
+@node Install "Installation"
+@{b}Installation@{ub}
+
+@{b}With the Install script (recommended)@{ub}
+
+Double-click the @{b}Install@{ub} icon in the NextcloudHandler drawer. It
+asks a few questions and then:
+
+  - checks that the @{"required libraries" link Requirements} are installed,
+  - copies nextcloud-handler to L:,
+  - creates a DOSDriver in DEVS:DOSDrivers (default name NC0) with your
+    server address, user name and volume name,
+  - copies this guide to a place you choose,
+  - can mount the volume right away.
+
+The password is not asked for by the script: the handler asks for it the
+first time the volume is used and can remember it, see
+@{"Password" link Password}.
+
+@{b}By hand@{ub}
+
+1. Install clib4 and AmiSSL, see @{"Requirements" link Requirements}.
+2. Copy L/nextcloud-handler to L:
+3. Copy Devs/DOSDrivers/NC0 (and its icon) to DEVS:DOSDrivers
+4. Edit DEVS:DOSDrivers/NC0 with a text editor and change the
+   @{b}Startup@{ub} line to your server, user name and volume name, see
+   @{"Settings" link Settings}.
+5. Double-click the NC0 icon, or type in a Shell:
+
+      Mount DEVS:DOSDrivers/NC0
+
+To mount it at every start, move NC0 (and its icon) to
+@{b}DEVS:DOSDrivers@{ub} and keep @{b}Activate = 1@{ub} in it. The handler
+connects only when the volume is first used, so it does not matter if the
+network is not up yet when the system starts.
+
+@{b}A second account@{ub}
+
+Copy the DOSDriver under another name (NC1, NC2, ...) and give it another
+VOLUME name. Each one is a separate volume with its own password.
+
+@endnode
+
+@node AppPassword "App password"
+@{b}App password@{ub}
+
+Nextcloud recommends a separate password for every device (an "app
+password"). It is needed if your account uses two-factor authentication,
+and it is better anyway: you can withdraw it at any time without changing
+your real password.
+
+In the Nextcloud web interface:
+
+  1. Click your user picture (top right) and choose @{b}Settings@{ub}
+     (or "Personal settings").
+  2. Choose @{b}Security@{ub}.
+  3. Under "Devices & sessions", enter a name such as "Amiga" and click
+     @{b}Create new app password@{ub}.
+  4. Nextcloud shows the user name and the password. Use exactly this user
+     name (it may differ from the name you log in with) and this password.
+
+@{b}Server address@{ub}: use the address you open in the browser, for example
+@{b}https://cloud.example.com@{ub} or @{b}https://example.com/nextcloud@{ub}.
+The handler finds the WebDAV address of your files by itself. The full
+WebDAV address (https://.../remote.php/dav/files/USER) works as well; you
+can see it in the Nextcloud Files app under "Files settings".
+
+@endnode
+
+@node Settings "Settings"
+@{b}Settings@{ub}
+
+All settings are on the @{b}Startup@{ub} line of the DOSDriver, for example:
+
+  Handler   = L:nextcloud-handler
+  StackSize = 262144
+  Priority  = 5
+  GlobVec   = -1
+  Activate  = 1
+  Startup   = "URL=https://cloud.example.com USER=anna VOLUME=Nextcloud"
+
+Keywords (only URL is required):
+
+  @{b}URL=address@{ub}        The server address, see @{"App password" link AppPassword}.
+  @{b}USER=name@{ub}          Your Nextcloud user name.
+  @{b}VOLUME=name@{ub}        The name of the volume (default: Nextcloud).
+  @{b}PASSWORD=pw@{ub}        The password. Better not used: anyone who can
+                     read the DOSDriver can see it. See @{"Password" link Password}.
+  @{b}NOPASSWORDREQ@{ub}      Never open the password requester.
+  @{b}READONLY@{ub}           Do not allow any changes on the server.
+  @{b}CACHETIME=s@{ub}        How many seconds the handler trusts what it
+                     read from the server before it asks again
+                     (default 5). Changes made elsewhere show up after
+                     this time.
+  @{b}TEMPDIR=dir@{ub}        Where files being written are kept until they
+                     are closed (default T:). Use a drawer on a hard disk
+                     for very big files.
+  @{b}KEEPDIR=dir@{ub}        Where a file is kept when it could not be
+                     saved on the server (default: TEMPDIR).
+  @{b}CHUNKSIZE=MB@{ub}       Files bigger than this are uploaded in parts
+                     (default 16). Nextcloud only.
+  @{b}TIMEOUT=s@{ub}          Give up when the server sends nothing for this
+                     many seconds (default 60).
+  @{b}CAFILE=file@{ub}        Trust the certificates in this PEM file.
+  @{b}CAPATH=dir@{ub}         Trust the certificates in this drawer
+                     (default AmiSSL:Certs).
+  @{b}INSECURE@{ub}           Do not check the server certificate. See
+                     @{"Security" link Security}.
+  @{b}PROXY=host:port@{ub}    Use an HTTP proxy.
+  @{b}CHARSET=name@{ub}       Character set of file names on the Amiga:
+                     ISO-8859-1 or ISO-8859-15 (default: the CHARSET
+                     environment variable).
+  @{b}DEBUG@{ub}              Write debug output, see @{"Troubleshooting" link Trouble}.
+
+A value with spaces must be in quotes, and inside the Startup line those
+quotes are written as *":
+
+  Startup = "URL=https://cloud.example.com USER=*"Anna Svensson*""
+
+@endnode
+
+@node Password "Password"
+@{b}Password@{ub}
+
+The handler looks for the password in this order:
+
+  1. The PASSWORD keyword of the DOSDriver.
+  2. The file ENV:NextcloudHandler/@{i}device@{ui}.auth (for example
+     ENV:NextcloudHandler/NC0.auth), which AmigaOS copies from
+     ENVARC:NextcloudHandler at every start.
+  3. A requester, the first time the volume is used.
+
+In the requester, tick @{b}Remember the password@{ub} to save it in
+ENVARC:NextcloudHandler/@{i}device@{ui}.auth. It is saved only after the
+server has accepted it.
+
+If the server does not accept the password, the requester opens again. If
+you click Cancel, the volume stays empty and the handler does not ask
+again, so that Workbench does not keep opening the requester. To try
+again, type in a Shell:
+
+  DiskChange NC0:
+
+To forget a saved password, delete ENVARC:NextcloudHandler/NC0.auth and
+ENV:NextcloudHandler/NC0.auth.
+
+@endnode
+
+@node Using "Using the volume"
+@{b}Using the volume@{ub}
+
+@{b}What works@{ub}
+
+  - Reading and writing files of any size (also above 4 GB), copying,
+    renaming, moving between drawers, deleting, creating drawers.
+  - File dates. "Copy CLONE" and SetDate keep the date on the server.
+  - File comments (FileNote) are stored on the server.
+  - File names with national characters (a with ring, a and o with dots
+    and so on) are converted between the Amiga character set and the
+    UTF-8 names on the server. Characters the Amiga cannot show appear as
+    %uXXXX; such files can still be opened, copied and renamed.
+  - Upper and lower case: like on any Amiga volume, "readme.txt" finds
+    "ReadMe.TXT". Writing a file with a name that differs only in case
+    replaces the existing file.
+  - Info shows the free space of your Nextcloud quota.
+
+@{b}How writing works@{ub}
+
+A file you write is first stored in TEMPDIR (T: unless set otherwise) and
+uploaded to the server when it is closed. Closing a big file therefore
+takes as long as the upload. The volume is busy during that time.
+
+If the upload fails (no space left on the server, connection lost, ...),
+a requester tells you, and the data is kept in TEMPDIR (or KEEPDIR) so
+that nothing is lost. The program that wrote the file is not told, as
+AmigaOS cannot report errors when a file is closed.
+
+@{b}Deleting drawers@{ub}
+
+As on any Amiga volume, only empty drawers can be deleted. (The server
+itself would delete a drawer with everything in it.) Deleted files go to
+the Nextcloud trash bin, where you can restore them in the web interface.
+
+@{b}Server not reachable@{ub}
+
+When the server cannot be reached, AmigaOS reports "No disk in drive" for
+the volume. The handler tries again at the next access (at most every
+10 seconds); nothing needs to be remounted.
+
+@endnode
+
+@node WebDAV "Other WebDAV servers"
+@{b}Other WebDAV servers@{ub}
+
+If the server is not a Nextcloud server, the handler uses the URL as the
+WebDAV folder to show. For ownCloud use the full WebDAV address, for
+example:
+
+  URL=https://owncloud.example.com/remote.php/webdav
+
+Some features need Nextcloud and are not available on other servers:
+keeping the file date (SetDate, Copy CLONE) and uploading big files in
+parts. The server must accept "Basic" login.
+
+@endnode
+
+@node Security "Security"
+@{b}Security@{ub}
+
+@{b}Certificates@{ub}
+
+The handler checks the server's certificate against the certificates
+that come with AmiSSL (AmiSSL:Certs). Certificates from Let's Encrypt and
+the other common authorities work without any setting.
+
+A server with a self-signed certificate or your own certificate authority
+fails the check. Do not switch the check off; instead give the handler the
+certificate (or the CA certificate) as a PEM file:
+
+  CAFILE=SYS:Prefs/NextcloudCA.pem
+
+INSECURE switches the check off completely. Then anyone between you and
+the server could read your files and your password. Use it only for a
+quick test on your own network.
+
+@{b}Stored password@{ub}
+
+A remembered password is stored as plain text in ENVARC:. Use an app
+password (see @{"App password" link AppPassword}), so that you can withdraw
+it in Nextcloud at any time.
+
+@endnode
+
+@node Limits "Limits"
+@{b}Limits@{ub}
+
+  - Protection bits (s, p, a, h and rwed) are not stored on the server.
+    Setting them is accepted but has no effect.
+  - Links are not supported.
+  - Changes made on the server by other devices show up after CACHETIME
+    seconds (and within a minute in a drawer you are writing to).
+  - Files being written are kept in TEMPDIR until they are closed, so
+    TEMPDIR needs room for the biggest file you write at once.
+  - Only one program can write to a file at a time.
+  - With filesysbox.library 54.9 (AmigaOS 4.1 FE Update 3) the handler
+    converts file names itself, ISO-8859-1 or ISO-8859-15. Other character
+    sets are not supported by this version.
+
+@endnode
+
+@node Trouble "Troubleshooting"
+@{b}Troubleshooting@{ub}
+
+@{b}The volume does not appear@{ub}
+   Check that the libraries in @{"Requirements" link Requirements} are
+   installed. The handler opens a requester when clib4, AmiSSL or
+   filesysbox.library is missing or too old.
+
+@{b}"No disk in drive"@{ub}
+   The server could not be reached or the login failed. Check the URL,
+   the network, and the user name and password (see @{"Password" link Password}).
+
+@{b}Certificate errors@{ub}
+   See @{"Security" link Security}.
+
+@{b}Debug output@{ub}
+   Add DEBUG to the Startup line and mount the volume again. The handler
+   then writes every request to the system debug log. To read it:
+
+      DumpDebugBuffer RAM:debug.txt
+
+   Look for the lines starting with [nextcloud-handler]. Please include
+   them when you report a problem.
+
+@endnode
+
+@node History "History"
+@{b}History@{ub}
+
+@{b}0.25 (15.11.2026)@{ub}
+   First release.
+
+@endnode
+
+@node Licence "Licence and credits"
+@{b}Licence and credits@{ub}
+
+nextcloud-handler is public domain (see LICENSE.txt). Source code:
+https://github.com/orgin/nextcloud_client
+
+It is built with these libraries, which have their own licences (see
+Third-party.txt):
+
+  - libcurl, (c) Daniel Stenberg and contributors, curl licence
+  - expat, MIT licence
+  - zlib, zlib licence
+  - clib4, (c) AmigaLabs, BSD licence
+  - AmiSSL link library, Apache licence 2.0
+  - filesysbox.library, (c) Leif Salomonsson and Fredrik Wikstrom
+
+Nextcloud is a trademark of Nextcloud GmbH. This handler is not made or
+endorsed by Nextcloud GmbH.
+
+@endnode

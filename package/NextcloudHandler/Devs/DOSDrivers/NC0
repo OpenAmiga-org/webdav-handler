@@ -1,0 +1,8 @@
+/* nextcloud-handler DOSDriver, see NextcloudHandler.guide.
+ * Change the Startup line to your server, user name and volume name. */
+Handler   = L:nextcloud-handler
+StackSize = 262144
+Priority  = 5
+GlobVec   = -1
+Activate  = 1
+Startup   = "URL=https://cloud.example.com USER=yourname VOLUME=Nextcloud"

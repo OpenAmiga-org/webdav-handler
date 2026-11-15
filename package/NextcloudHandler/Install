@@ -1,0 +1,164 @@
+; Install script for nextcloud-handler (AmigaOS 4 Installation Utility).
+; Public domain.
+
+(set #app "Nextcloud Handler")
+(set @app-name "NextcloudHandler")
+(set @default-dest "L:")
+
+(set #bad 0)
+(set #missing "")
+
+(welcome
+  (cat "This installs " #app ", which shows your Nextcloud files as a volume.\n"
+       "It copies the handler to L: and creates a DOSDriver."))
+
+; --- requirements -------------------------------------------------------
+
+(procedure P_CHECK #lib #minver #minrev #what #where
+  (set #v (getversion #lib (resident)))
+  (if (= #v 0) (set #v (getversion (tackon "LIBS:" #lib))))
+  (if (< #v (+ (* #minver 65536) #minrev))
+    (
+      (set #bad 1)
+      (set #missing (cat #missing "\n\n" #what " (" #lib " " #minver "." #minrev
+                         " or newer) is missing or too old.\nGet it from: " #where))
+    )
+  )
+)
+
+(P_CHECK "filesysbox.library" 54 8 "filesysbox"
+         "AmigaOS 4.1 Final Edition updates")
+(P_CHECK "clib4.library" 2 5 "clib4"
+         "OS4Depot development/library/misc/clib4.lha\nor https://github.com/AmigaLabs/clib4/releases")
+(P_CHECK "amisslmaster.library" 5 0 "AmiSSL"
+         "OS4Depot library/misc/amissl.lha\nor https://github.com/jens-maus/amissl/releases")
+
+(if #bad
+  (if (= 0 (askbool
+        (prompt (cat "Some required libraries are missing:" #missing
+                     "\n\nThe handler cannot work without them. You can install "
+                     "it now and add the libraries later."))
+        (help @askbool-help)
+        (choices "Install anyway" "Stop")
+        (default 0)))
+    (exit (quiet))
+  )
+)
+
+; --- the handler --------------------------------------------------------
+
+(copyfiles
+  (prompt "Copying nextcloud-handler to L:")
+  (help @copyfiles-help)
+  (source "L/nextcloud-handler")
+  (dest "L:")
+  (confirm "expert"))
+
+; --- the DOSDriver ------------------------------------------------------
+
+(set #device
+  (askstring
+    (prompt "Name of the device (DOSDriver), without a colon.\n"
+            "Use another name for each account (NC0, NC1, ...).")
+    (help @askstring-help)
+    (default "NC0")))
+
+(set #url
+  (askstring
+    (prompt "Address of your Nextcloud server, as you open it in the "
+            "browser, for example:\nhttps://cloud.example.com")
+    (help "The handler finds the WebDAV address of your files by itself. "
+          "For other WebDAV servers enter the full WebDAV address.")
+    (default "https://")))
+
+(set #user
+  (askstring
+    (prompt "Your Nextcloud user name.\n"
+            "With an app password, use the user name Nextcloud showed with it.")
+    (help "See \"App password\" in NextcloudHandler.guide.")
+    (default "")))
+
+(set #volume
+  (askstring
+    (prompt "Name of the volume on Workbench:")
+    (help @askstring-help)
+    (default "Nextcloud")))
+
+(set #activate
+  (askbool
+    (prompt "Mount the volume every time the computer starts?\n"
+            "(It connects only when it is first used.)")
+    (help @askbool-help)
+    (default 1)))
+
+(set #ddfile (tackon "DEVS:DOSDrivers" #device))
+(if (exists #ddfile)
+  (if (= 0 (askbool
+        (prompt (cat #ddfile " exists already. Replace it?"))
+        (help @askbool-help)
+        (default 0)))
+    (exit)
+  )
+)
+
+(textfile
+  (prompt (cat "Creating " #ddfile))
+  (help @textfile-help)
+  (dest #ddfile)
+  (append "/* nextcloud-handler DOSDriver, see NextcloudHandler.guide */\n")
+  (append "Handler   = L:nextcloud-handler\n")
+  (append "StackSize = 262144\n")
+  (append "Priority  = 5\n")
+  (append "GlobVec   = -1\n")
+  (append (cat "Activate  = " (if #activate "1" "0") "\n"))
+  (append (cat "Startup   = \"URL=" #url
+               (if (= #user "") "" (cat " USER=" #user))
+               " VOLUME=" #volume "\"\n"))
+  (confirm "expert"))
+
+(copyfiles
+  (prompt "Copying the DOSDriver icon")
+  (help @copyfiles-help)
+  (source "Devs/DOSDrivers/NC0.info")
+  (dest "DEVS:DOSDrivers")
+  (newname (cat #device ".info"))
+  (nogauge))
+
+; --- documentation ------------------------------------------------------
+
+(set #docdir
+  (askdir
+    (prompt "Where should the documentation go?\n"
+            "A drawer named NextcloudHandler is created there.")
+    (help @askdir-help)
+    (default "SYS:Documentation")))
+
+(set #docs (tackon #docdir "NextcloudHandler"))
+(makedir #docs (prompt "Creating the documentation drawer") (help @makedir-help) (infos))
+(foreach "" "#?.(guide|txt)"
+  (copyfiles
+    (prompt "Copying the documentation")
+    (help @copyfiles-help)
+    (source @each-name)
+    (dest #docs)
+    (infos)
+    (nogauge)))
+
+; --- mount now ----------------------------------------------------------
+
+(if (askbool
+      (prompt (cat "Mount " #device ": now?\n\n"
+                   "The first time the volume is used, the handler asks for "
+                   "your password. Tick \"Remember the password\" so that it "
+                   "is not asked again."))
+      (help @askbool-help)
+      (default 1))
+  (if (= 0 (run (cat "C:Assign >NIL: " #device ": EXISTS")))
+    (message (cat #device ": is mounted already. To use the new settings, "
+                  "restart the computer."))
+    (run (cat "C:Mount " #device ":"))
+  )
+)
+
+(exit (cat #app " is installed.\n\nRead " (tackon #docs "NextcloudHandler.guide")
+           " for all settings."))
