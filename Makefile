@@ -6,7 +6,7 @@
 #   make test       Linux build + tests against the Docker test server
 #   make lha        release archive         -> dist/NextcloudHandler.lha
 
-CORE_SRC  = src/core/util.c src/core/davxml.c src/core/davclient.c src/core/ncfs.c
+CORE_SRC  = src/core/util.c src/core/charset.c src/core/davxml.c src/core/davclient.c src/core/ncfs.c
 CORE_HDR  = $(wildcard src/core/*.h)
 
 CC        ?= gcc

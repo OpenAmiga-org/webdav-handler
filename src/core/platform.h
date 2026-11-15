@@ -33,6 +33,11 @@ void    plat_log(int level, const char *fmt, ...)
 #endif
 	;
 
+/* Looks up a host name. Returns 0 and the numeric address in ip, or -1
+ * to let libcurl resolve it itself. (curl's threaded resolver does not
+ * work with clib4 on AmigaOS, so the OS4 build resolves in the handler.) */
+int     plat_resolve(const char *host, char *ip, size_t iplen);
+
 /* Tells the user about a problem that cannot be returned as an error code,
  * for example a failed upload when a file is closed. */
 void    plat_report(const char *title, const char *message);

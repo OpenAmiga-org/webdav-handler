@@ -30,8 +30,12 @@ struct dav_session {
 	char       *root_url;     /* origin + root_path + "/" */
 	int         nextcloud;
 	char       *uploads_url;  /* Nextcloud chunked upload folder, or NULL */
+	struct curl_slist *resolve; /* host:port:address for curl */
+	int64_t     resolved_at;
 	int64_t     chunk_size;
 	unsigned    upload_seq;
+
+	long        last_status;  /* HTTP status of the last failed request */
 
 	char        curlerr[CURL_ERROR_SIZE];
 	char        errmsg[512];
@@ -125,6 +129,7 @@ void dav_free(dav_session *s)
 	free(s->root_dec);
 	free(s->root_url);
 	free(s->uploads_url);
+	curl_slist_free_all(s->resolve);
 	free(s);
 }
 
@@ -136,6 +141,18 @@ const char *dav_error(dav_session *s)
 int dav_is_nextcloud(dav_session *s)
 {
 	return s->nextcloud;
+}
+
+long dav_last_status(dav_session *s)
+{
+	return s->last_status;
+}
+
+int dav_set_password(dav_session *s, const char *password)
+{
+	free(s->password);
+	s->password = dupnull(password);
+	return 0;
 }
 
 const char *dav_root_url(dav_session *s)
@@ -208,6 +225,7 @@ static int set_http_error(dav_session *s, dav_req *r)
 {
 	char msg[200];
 
+	s->last_status = r->status;
 	server_message(r->errbody.data, msg, sizeof(msg));
 	snprintf(s->errmsg, sizeof(s->errmsg), "%s %s: HTTP %ld %s%s", r->method,
 	         r->path != NULL ? r->path : (r->url != NULL ? r->url : ""),
@@ -308,6 +326,67 @@ static int on_seek(void *ud, curl_off_t off, int origin)
 	return CURL_SEEKFUNC_OK;
 }
 
+/* --- name lookup ----------------------------------------------------- */
+
+#define RESOLVE_MS (10 * 60 * 1000)
+
+static int is_numeric_host(const char *h)
+{
+	if (h[0] == '[')
+		return 1; /* IPv6 literal */
+	for (; *h != '\0'; h++) {
+		if ((*h < '0' || *h > '9') && *h != '.')
+			return 0;
+	}
+	return 1;
+}
+
+/* Adds "host:port:address" for the host of url ("scheme://host[:port]..."). */
+static void add_resolve(dav_session *s, const char *url)
+{
+	const char *p = strstr(url, "://"), *h, *e;
+	char host[256], ip[64], entry[400];
+	long port;
+
+	if (p == NULL)
+		return;
+	h = p + 3;
+	if (strchr(h, '@') != NULL && strchr(h, '@') < (strchr(h, '/') ? strchr(h, '/') : h + strlen(h)))
+		h = strchr(h, '@') + 1;
+	e = h;
+	while (*e != '\0' && *e != ':' && *e != '/')
+		e++;
+	if ((size_t)(e - h) >= sizeof(host) || e == h)
+		return;
+	memcpy(host, h, (size_t)(e - h));
+	host[e - h] = '\0';
+	port = strncmp(url, "https", 5) == 0 ? 443 : 80;
+	if (*e == ':')
+		port = strtol(e + 1, NULL, 10);
+	if (is_numeric_host(host))
+		return;
+	if (plat_resolve(host, ip, sizeof(ip)) != 0)
+		return;
+	snprintf(entry, sizeof(entry), "%s:%ld:%s", host, port, ip);
+	s->resolve = curl_slist_append(s->resolve, entry);
+	plat_log(LOG_DEBUG, "resolved %s\n", entry);
+}
+
+static void refresh_resolve(dav_session *s, int force)
+{
+	if (!force && s->resolved_at != 0 && plat_ms() - s->resolved_at < RESOLVE_MS)
+		return;
+	curl_slist_free_all(s->resolve);
+	s->resolve = NULL;
+	add_resolve(s, s->url);
+	if (s->proxy != NULL) {
+		char purl[300];
+		snprintf(purl, sizeof(purl), "%s%s", strstr(s->proxy, "://") ? "" : "http://", s->proxy);
+		add_resolve(s, purl);
+	}
+	s->resolved_at = plat_ms();
+}
+
 /* --- request --------------------------------------------------------- */
 
 static char *make_url(dav_session *s, const char *path, int dir)
@@ -341,7 +420,11 @@ static int perform(dav_session *s, dav_req *r)
 		return -ENOMEM;
 
 	curl_easy_reset(c);
+	s->last_status = 0;
+	refresh_resolve(s, 0);
 	s->curlerr[0] = '\0';
+	if (s->resolve != NULL)
+		curl_easy_setopt(c, CURLOPT_RESOLVE, s->resolve);
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_ERRORBUFFER, s->curlerr);
 	curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
@@ -409,6 +492,8 @@ static int perform(dav_session *s, dav_req *r)
 		case CURLE_COULDNT_RESOLVE_HOST:
 		case CURLE_COULDNT_RESOLVE_PROXY:
 		case CURLE_COULDNT_CONNECT:
+			s->resolved_at = 0; /* look the name up again next time */
+			return -ENODEV;   /* AmigaDOS shows "no disk" with Retry */
 		case CURLE_OPERATION_TIMEDOUT:
 		case CURLE_SEND_ERROR:
 		case CURLE_RECV_ERROR:

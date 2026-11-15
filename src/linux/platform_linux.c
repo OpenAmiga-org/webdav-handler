@@ -113,6 +113,14 @@ void plat_log(int level, const char *fmt, ...)
 	va_end(ap);
 }
 
+int plat_resolve(const char *host, char *ip, size_t iplen)
+{
+	(void)host;
+	(void)ip;
+	(void)iplen;
+	return -1; /* curl resolves by itself on Linux */
+}
+
 void plat_report(const char *title, const char *message)
 {
 	fprintf(stderr, "[nch] *** %s ***\n%s\n", title, message);

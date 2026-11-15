@@ -51,6 +51,8 @@ int  dav_connect(dav_session *s);
 void dav_free(dav_session *s);
 
 const char *dav_error(dav_session *s);   /* text for the last failure */
+long dav_last_status(dav_session *s);    /* HTTP status of it, 0 if none */
+int  dav_set_password(dav_session *s, const char *password);
 int  dav_is_nextcloud(dav_session *s);
 const char *dav_root_url(dav_session *s);
 
