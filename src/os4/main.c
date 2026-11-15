@@ -614,6 +614,10 @@ static int handler_main(struct DosPacket *pkt)
 		goto fail;
 	}
 	pkt = NULL; /* the filesysbox process replies it */
+	/* The network work happens here. Below the TCP/IP stack's priority so
+	 * that waiting for data can never hold the stack up; the filesysbox
+	 * process keeps the handler priority. */
+	IExec->SetTaskPri(IExec->FindTask(NULL), -1);
 	g.convert = !fbx_utf8_names;
 	plat_log(LOG_INFO, "file names: %s\n", g.convert ?
 	         "converted by the handler" : "converted by filesysbox");

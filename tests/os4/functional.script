@@ -1,0 +1,25 @@
+; nextcloud-handler functional test, run in the OS4 guest with NC1: mounted
+FailAt 21
+Echo "== download"
+Copy NC1:big5.bin RAM:nch/big5.bin CLONE
+Echo "== upload"
+Copy RAM:nch/big5.bin NC1:big5_up.bin CLONE
+Echo "== case"
+Type NC1:hello.TXT
+Echo ""
+Echo "== mkdir/copy/rename/note/date"
+MakeDir NC1:NewDir
+Copy NC1:Hello.txt NC1:NewDir/
+Rename NC1:NewDir/Hello.txt NC1:NewDir/Renamed.txt
+FileNote NC1:NewDir/Renamed.txt "A comment"
+SetDate NC1:NewDir/Renamed.txt 01-Jan-20 12:00:00
+List NC1:NewDir
+Echo "== delete full dir (must fail)"
+Delete NC1:NewDir
+Echo "== delete all"
+Delete NC1:NewDir ALL
+Echo "== protect"
+Protect NC1:Hello.txt +s
+Echo "== info"
+Info NC1:
+Echo "== done"

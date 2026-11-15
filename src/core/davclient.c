@@ -406,6 +406,15 @@ static char *make_url(dav_session *s, const char *path, int dir)
 	return sb_steal(&sb);
 }
 
+static long xfer_calls;
+
+static int on_xferinfo(void *ud, curl_off_t dt, curl_off_t dn, curl_off_t ut, curl_off_t un)
+{
+	(void)ud; (void)dt; (void)dn; (void)ut; (void)un;
+	xfer_calls++;
+	return 0;
+}
+
 /* Runs the request. Returns 0 when an HTTP response arrived (any status,
  * see r->status) or -errno when the transfer failed. */
 static int perform(dav_session *s, dav_req *r)
@@ -433,6 +442,9 @@ static int perform(dav_session *s, dav_req *r)
 	curl_easy_setopt(c, CURLOPT_LOW_SPEED_LIMIT, 1L);
 	curl_easy_setopt(c, CURLOPT_LOW_SPEED_TIME, timeout);
 	curl_easy_setopt(c, CURLOPT_TCP_KEEPALIVE, 1L);
+	/* big buffers: on AmigaOS every wait for the socket is expensive */
+	curl_easy_setopt(c, CURLOPT_BUFFERSIZE, 512L * 1024);
+	curl_easy_setopt(c, CURLOPT_UPLOAD_BUFFERSIZE, 1024L * 1024);
 	if (s->user_agent != NULL)
 		curl_easy_setopt(c, CURLOPT_USERAGENT, s->user_agent);
 	if (s->user != NULL) {
@@ -473,6 +485,11 @@ static int perform(dav_session *s, dav_req *r)
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, r);
 
 	plat_log(LOG_DEBUG, "%s %s\n", r->method, url);
+	if (plat_loglevel >= LOG_DEBUG) {
+		xfer_calls = 0;
+		curl_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
+		curl_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, on_xferinfo);
+	}
 	r->status = 0;
 	rc = curl_easy_perform(c);
 	free(url);
@@ -510,6 +527,15 @@ static int perform(dav_session *s, dav_req *r)
 		}
 	}
 	curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &r->status);
+	if (plat_loglevel >= LOG_DEBUG) {
+		curl_off_t down = 0, up = 0;
+		double secs = 0;
+		curl_easy_getinfo(c, CURLINFO_SIZE_DOWNLOAD_T, &down);
+		curl_easy_getinfo(c, CURLINFO_SIZE_UPLOAD_T, &up);
+		curl_easy_getinfo(c, CURLINFO_TOTAL_TIME, &secs);
+		plat_log(LOG_DEBUG, "  -> %ld, %lld down, %lld up, %d ms, %ld loops\n", r->status,
+		         (long long)down, (long long)up, (int)(secs * 1000), xfer_calls);
+	}
 	return 0;
 }
 
@@ -859,6 +885,7 @@ int dav_get_range(dav_session *s, const char *path, int64_t off, void *buf,
 	snprintf(range, sizeof(range), "Range: bytes=%lld-%lld", (long long)off,
 	         (long long)(off + (int64_t)len - 1));
 	r.headers = curl_slist_append(NULL, range);
+	plat_log(LOG_DEBUG, "%s\n", range);
 	r.range_off = off;
 	err = perform(s, &r);
 	if (err == 0 && r.status == 416)
