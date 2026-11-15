@@ -99,6 +99,10 @@ static int fresh(ncfs *fs, int64_t when)
 	return plat_ms() - when < (int64_t)fs->opt.cache_ms;
 }
 
+/* The root's own attributes hardly matter and Workbench asks for them
+ * every few seconds, so they are kept longer. */
+#define ROOT_MS 30000
+
 /* --- cache ------------------------------------------------------------ */
 
 static void entry_free(entry *e)
@@ -222,8 +226,11 @@ static statent *stat_find(ncfs *fs, const char *path)
 	statent *s;
 
 	for (s = fs->stats[hash(path)]; s != NULL; s = s->next) {
-		if (strcmp(s->path, path) == 0)
+		if (strcmp(s->path, path) == 0) {
+			if (strcmp(path, "/") == 0)
+				return plat_ms() - s->when < ROOT_MS ? s : NULL;
 			return fresh(fs, s->when) ? s : NULL;
+		}
 	}
 	return NULL;
 }
@@ -1096,7 +1103,7 @@ int ncfs_release(ncfs *fs, ncfs_file *f)
 	if (f->tf != NULL && f->dirty) {
 		err = upload(fs, f);
 		if (err != 0) {
-			char kept[512], name[128], msg[1024];
+			char kept[512], name[128], msg[1800];
 			const char *base = path_basename(f->path);
 			int kerr;
 
@@ -1105,17 +1112,23 @@ int ncfs_release(ncfs *fs, ncfs_file *f)
 			kerr = fs->opt.keepdir != NULL ?
 			       tmpf_keep(f->tf, fs->opt.keepdir, name, kept, sizeof(kept)) :
 			       -ENOENT;
+			char shown[600];
+
+			if (fs->opt.display != NULL)
+				snprintf(shown, sizeof(shown), "%s%s", fs->opt.display, f->path + 1);
+			else
+				snprintf(shown, sizeof(shown), "%s", f->path);
 			if (kerr == 0) {
 				snprintf(msg, sizeof(msg),
 				         "Could not save \"%s\" on the server.\n%s\n\n"
 				         "The data was kept in\n%s",
-				         f->path, dav_error(fs->dav), kept);
+				         shown, dav_error(fs->dav), kept);
 				f->tf = NULL; /* now owned by the kept file */
 			} else {
 				snprintf(msg, sizeof(msg),
 				         "Could not save \"%s\" on the server.\n%s\n\n"
 				         "The data could not be kept either.",
-				         f->path, dav_error(fs->dav));
+				         shown, dav_error(fs->dav));
 			}
 			plat_report("Upload failed", msg);
 		}

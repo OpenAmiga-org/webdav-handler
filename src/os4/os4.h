@@ -15,5 +15,6 @@ int  req_password(const char *device, const char *user, const char *server,
 
 /* platform_os4.c */
 extern int plat_debug_serial;
+extern int plat_charset;   /* messages are converted to it, -1 = no */
 
 #endif

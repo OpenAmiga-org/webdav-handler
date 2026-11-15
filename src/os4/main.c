@@ -117,11 +117,13 @@ enum {
 static struct {
 	char         device[64];
 	char         volume[128];
+	char         display[130];
 	char         url[512];
 	char         user[128];
 	char         password[256];
 	int          have_password;
 	int          ask_password;
+	int          cancelled;  /* the password requester was cancelled */
 	int          readonly;
 	int          convert;   /* names arrive in the local character set */
 	int          cs;        /* that character set */
@@ -207,7 +209,7 @@ static void save_password(void)
 static int online(void)
 {
 	const char *problem = NULL;
-	int tries, err = -ENODEV;
+	int tries, err = -ENODEV, remember = 0;
 
 	if (g.connected)
 		return 0;
@@ -216,21 +218,26 @@ static int online(void)
 
 	for (tries = 0; tries < 3; tries++) {
 		if (!g.have_password && g.user[0] != '\0') {
-			int remember = 0;
-
-			if (!g.ask_password ||
-			    !req_password(g.device, g.user, g.url, problem, g.password,
+			if (!g.ask_password || g.cancelled) {
+				err = -EACCES;
+				goto fail;
+			}
+			if (!req_password(g.device, g.user, g.url, problem, g.password,
 			                  sizeof(g.password), &remember)) {
+				/* Workbench looks at the volume all the time: do not ask
+				 * again until "DiskChange" or a new mount */
+				g.cancelled = 1;
 				err = -EACCES;
 				goto fail;
 			}
 			g.have_password = 1;
-			if (remember)
-				save_password();
 		}
 		dav_set_password(g.dav, g.password);
 		err = dav_connect(g.dav);
 		if (err == 0) {
+			/* saved only once the server has accepted it */
+			if (remember)
+				save_password();
 			g.connected = 1;
 			g.last_try = 0;
 			g.last_err = 0;
@@ -246,7 +253,9 @@ static int online(void)
 	}
 fail:
 	g.last_try = plat_ms();
-	g.last_err = err == -EACCES ? -EACCES : -ENODEV;
+	/* AmigaDOS shows "no disk": the volume is there but not reachable or
+	 * not logged in; the next access tries again */
+	g.last_err = -ENODEV;
 	plat_log(LOG_ERR, "cannot connect to %s: %s\n", g.url, dav_error(g.dav));
 	return g.last_err;
 }
@@ -454,6 +463,11 @@ void rpc_serve(struct rpc *r)
 		if (err == 0)
 			err = ncfs_setcomment(g.fs, r->path, r->cbuf);
 		break;
+	case OP_RESET:
+		g.cancelled = 0;
+		g.last_try = 0;
+		err = 0;
+		break;
 	default:
 		err = -ENOSYS;
 		break;
@@ -593,6 +607,8 @@ static int handler_main(struct DosPacket *pkt)
 	g.fo.keepdir = dupstr(args[A_KEEPDIR] ? (const char *)args[A_KEEPDIR] : g.fo.tempdir);
 	g.fo.cache_ms = args[A_CACHETIME] ? *(int32 *)args[A_CACHETIME] * 1000 : 5000;
 	g.fo.readonly = g.readonly;
+	snprintf(g.display, sizeof(g.display), "%s:", g.volume);
+	g.fo.display = g.display;
 
 	IDOS->FreeArgs(rda);
 	IDOS->FreeDosObject(DOS_RDARGS, rda);
@@ -619,6 +635,7 @@ static int handler_main(struct DosPacket *pkt)
 	 * process keeps the handler priority. */
 	IExec->SetTaskPri(IExec->FindTask(NULL), -1);
 	g.convert = !fbx_utf8_names;
+	plat_charset = g.cs; /* requester texts are always in the local set */
 	plat_log(LOG_INFO, "file names: %s\n", g.convert ?
 	         "converted by the handler" : "converted by filesysbox");
 	serve_requests();

@@ -113,6 +113,11 @@ static void fill_stat(const ncfs_stat *ns, struct fbx_stat *st)
 
 static void *nc_init(struct fuse_conn_info *conn)
 {
+	struct rpc r;
+
+	/* after "DiskChange" the handler may ask for the password again */
+	rpc_init(&r, OP_RESET, NULL);
+	rpc_call(&r);
 	strcopy(conn->volume_name, volname, CONN_VOLUME_NAME_BYTES);
 	return &rpc_worker_port; /* NULL would mean "no disk in drive" */
 }

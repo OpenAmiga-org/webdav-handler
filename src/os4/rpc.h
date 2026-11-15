@@ -38,7 +38,8 @@ enum {
 	OP_STATFS,
 	OP_GETCOMMENT,
 	OP_SETCOMMENT,
-	OP_FSDONE      /* the filesysbox process has finished */
+	OP_FSDONE,     /* the filesysbox process has finished */
+	OP_RESET       /* volume set up again (DiskChange): may ask again */
 };
 
 /* readdir results: entries packed one after another */

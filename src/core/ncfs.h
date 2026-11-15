@@ -25,6 +25,7 @@ typedef struct {
 	int         readonly;    /* refuse all changes */
 	size_t      read_block;  /* smallest range request */
 	size_t      read_max;    /* largest range request */
+	const char *display;     /* shown before paths in messages, e.g. "Nextcloud:" */
 } ncfs_options;
 
 typedef struct ncfs ncfs;

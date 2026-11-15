@@ -1,6 +1,7 @@
 /* nextcloud-handler - platform functions for AmigaOS 4 (clib4).
  * Public domain. */
 #include "platform.h"
+#include "charset.h"
 #include "os4.h"
 
 #include <proto/exec.h>
@@ -21,6 +22,7 @@
 
 int plat_loglevel = LOG_ERR;
 int plat_debug_serial = 0;
+int plat_charset = -1;   /* convert messages from UTF-8 when >= 0 */
 
 struct tmpf {
 	int  fd;
@@ -105,8 +107,11 @@ static int copy_file(int from, const char *to)
 	return n < 0 ? -EIO : 0;
 }
 
-int tmpf_keep(tmpf *f, const char *dir, const char *name, char *out, size_t outlen)
+int tmpf_keep(tmpf *f, const char *dir, const char *uname, char *out, size_t outlen)
 {
+	/* the name comes from the server (UTF-8); files here use the local set */
+	char *lname = plat_charset >= 0 ? cs_utf8_to_local(plat_charset, uname) : NULL;
+	const char *name = lname != NULL ? lname : uname;
 	size_t n = strlen(dir);
 	const char *sep = (n > 0 && dir[n - 1] != ':' && dir[n - 1] != '/') ? "/" : "";
 	int i, err;
@@ -116,6 +121,7 @@ int tmpf_keep(tmpf *f, const char *dir, const char *name, char *out, size_t outl
 	snprintf(out, outlen, "%s%s%s", dir, sep, name);
 	for (i = 1; access(out, F_OK) == 0 && i < 1000; i++)
 		snprintf(out, outlen, "%s%s%s.%d", dir, sep, name, i);
+	free(lname);
 	close(f->fd);
 	if (rename(f->path, out) == 0) {
 		free(f);
@@ -181,6 +187,9 @@ int plat_resolve(const char *host, char *ip, size_t iplen)
 
 void plat_report(const char *title, const char *message)
 {
+	char *local = plat_charset >= 0 ? cs_utf8_to_local(plat_charset, message) : NULL;
+
 	plat_log(LOG_ERR, "%s: %s\n", title, message);
-	req_message(title, message);
+	req_message(title, local != NULL ? local : message);
+	free(local);
 }
