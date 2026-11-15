@@ -1,0 +1,20 @@
+; Area K: 1000 file operations (create, note, rename, read, delete).
+FailAt 21
+Delete NC1:ops ALL QUIET
+MakeDir NC1:ops
+Avail FLUSH
+Set n 0
+Lab loop
+Echo "file $n" >NC1:ops/f$n
+FileNote NC1:ops/f$n "note $n" QUIET
+Rename NC1:ops/f$n NC1:ops/g$n QUIET
+Type NC1:ops/g$n >NIL:
+Delete NC1:ops/g$n QUIET
+Set n `Eval $n + 1`
+If $n LT 200
+  Skip loop BACK
+EndIf
+Echo "== ops done: $n x 5"
+List NC1:ops
+Delete NC1:ops QUIET
+Avail FLUSH

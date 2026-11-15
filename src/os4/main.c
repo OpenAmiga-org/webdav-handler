@@ -275,7 +275,7 @@ struct dirbuf {
 static int dir_add(void *ud, const char *uname, const ncfs_stat *st)
 {
 	struct dirbuf *d = ud;
-	char *lname = g.convert ? cs_utf8_to_local(g.cs, uname) : NULL;
+	char *lname = g.convert ? cs_utf8_to_name(g.cs, uname) : NULL;
 	const char *name = lname != NULL ? lname : uname;
 	uint32 need = (offsetof(struct rpc_dirent, name) + strlen(name) + 1 + 7) & ~7U;
 	struct rpc_dirent *e;

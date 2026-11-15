@@ -1,0 +1,17 @@
+; Area K: 20 dismount/mount cycles with a listing each time.
+FailAt 21
+Avail FLUSH
+Set n 0
+Lab loop
+C:Dismount NC1:
+Mount RAM:nch/NC1
+List NC1: QUICK >NIL:
+If WARN
+  Echo "list failed in cycle $n"
+EndIf
+Set n `Eval $n + 1`
+If $n LT 20
+  Skip loop BACK
+EndIf
+Echo "== cycles done: $n"
+Avail FLUSH

@@ -123,7 +123,7 @@ char *cs_local_to_utf8(int cs, const char *local)
 	return sb_steal(&sb);
 }
 
-char *cs_utf8_to_local(int cs, const char *utf8)
+static char *to_local(int cs, const char *utf8, int is_name)
 {
 	const unsigned char *p = (const unsigned char *)utf8;
 	strbuf sb;
@@ -160,6 +160,9 @@ char *cs_utf8_to_local(int cs, const char *utf8)
 			continue;
 		}
 		b = cp < 0x80 && cp >= 0x20 && cp != 0x7F ? (int)cp : cp_to_byte(cs, cp);
+		/* AmigaDOS reads ':' in a name as the end of a device name */
+		if (is_name && cp == ':')
+			b = -1;
 		if (b >= 0) {
 			char c = (char)b;
 			sb_append(&sb, &c, 1);
@@ -172,4 +175,14 @@ char *cs_utf8_to_local(int cs, const char *utf8)
 		}
 	}
 	return sb_steal(&sb);
+}
+
+char *cs_utf8_to_local(int cs, const char *utf8)
+{
+	return to_local(cs, utf8, 0);
+}
+
+char *cs_utf8_to_name(int cs, const char *utf8)
+{
+	return to_local(cs, utf8, 1);
 }

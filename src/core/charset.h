@@ -18,5 +18,7 @@ int  cs_from_name(const char *name);
 /* Both return a malloc'ed string, or NULL when out of memory. */
 char *cs_local_to_utf8(int cs, const char *local);
 char *cs_utf8_to_local(int cs, const char *utf8);
+/* For file names: also escapes ':', which AmigaDOS cannot have in a name. */
+char *cs_utf8_to_name(int cs, const char *utf8);
 
 #endif

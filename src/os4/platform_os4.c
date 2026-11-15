@@ -110,7 +110,7 @@ static int copy_file(int from, const char *to)
 int tmpf_keep(tmpf *f, const char *dir, const char *uname, char *out, size_t outlen)
 {
 	/* the name comes from the server (UTF-8); files here use the local set */
-	char *lname = plat_charset >= 0 ? cs_utf8_to_local(plat_charset, uname) : NULL;
+	char *lname = plat_charset >= 0 ? cs_utf8_to_name(plat_charset, uname) : NULL;
 	const char *name = lname != NULL ? lname : uname;
 	size_t n = strlen(dir);
 	const char *sep = (n > 0 && dir[n - 1] != ':' && dir[n - 1] != '/') ? "/" : "";

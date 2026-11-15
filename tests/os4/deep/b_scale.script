@@ -1,0 +1,22 @@
+; Area B: a 500-file tree with a 20 MB file to the volume and back.
+; Needs RAM:nch/gentree and NC1: mounted.
+FailAt 21
+Delete RAM:nch/tree RAM:nch/back ALL QUIET
+Delete NC1:tree ALL QUIET
+RAM:nch/gentree make RAM:nch/tree BIG
+Echo "== upload start" NOLINE
+Date
+Copy RAM:nch/tree NC1:tree ALL CLONE QUIET
+Echo "== upload end" NOLINE
+Date
+RAM:nch/gentree check NC1:tree BIG
+Echo "== download start" NOLINE
+Date
+Copy NC1:tree RAM:nch/back ALL CLONE QUIET
+Echo "== download end" NOLINE
+Date
+RAM:nch/gentree check RAM:nch/back BIG
+List RAM:nch/tree/Drawer0 LFORMAT "%n %l %d %t" > RAM:nch/dates_local.txt
+List NC1:tree/Drawer0 LFORMAT "%n %l %d %t" > RAM:nch/dates_remote.txt
+List RAM:nch/back/Drawer0 LFORMAT "%n %l %d %t" > RAM:nch/dates_back.txt
+Echo "== done"

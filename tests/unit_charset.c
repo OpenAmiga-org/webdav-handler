@@ -64,6 +64,17 @@ int main(void)
 	check("plain percent", s, "50% off");
 	free(s);
 
+	/* ':' cannot be part of an AmigaDOS name, but can be in a message */
+	s = cs_utf8_to_name(CS_ISO_8859_1, "12:30 Meeting");
+	check("colon in name", s, "12%u003A30 Meeting");
+	free(s);
+	s = cs_utf8_to_local(CS_ISO_8859_1, "Error: none");
+	check("colon in text", s, "Error: none");
+	free(s);
+	s = cs_local_to_utf8(CS_ISO_8859_1, "12%u003A30");
+	check("colon back", s, "12:30");
+	free(s);
+
 	roundtrip(CS_ISO_8859_1, "R\xC3\xA4ksm\xC3\xB6rg\xC3\xA5s \xE2\x82\xAC \xE6\x97\xA5 100%up %U");
 	roundtrip(CS_ISO_8859_15, "\xC5\xA0koda \xE2\x82\xAC \xC2\xA4 \xF0\x9F\x98\x80");
 	roundtrip(CS_ISO_8859_1, "tab\there");

@@ -1,0 +1,18 @@
+; Area J: two copies at the same time, and reading a file while another
+; one is written. Needs b_scale.script run first (RAM:nch/tree).
+FailAt 21
+Delete NC1:j1 NC1:j2 ALL QUIET
+Delete RAM:nch/j3 ALL QUIET
+Run >RAM:nch/j1.log Copy RAM:nch/tree/Drawer0 NC1:j1 ALL CLONE QUIET
+Run >RAM:nch/j2.log Copy RAM:nch/tree/Drawer5 NC1:j2 ALL CLONE QUIET
+Run >RAM:nch/j3.log Copy NC1:tree/big_20MB.bin RAM:nch/j3/ QUIET
+Copy RAM:nch/tree/big_20MB.bin NC1:j_big.bin
+Echo "== foreground copy done"
+Lab wait
+Wait 2
+Status COMMAND Copy >NIL:
+If NOT WARN
+  Skip wait BACK
+EndIf
+Echo "== all copies done"
+Type RAM:nch/j1.log RAM:nch/j2.log RAM:nch/j3.log
