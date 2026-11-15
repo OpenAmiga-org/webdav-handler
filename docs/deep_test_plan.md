@@ -87,5 +87,33 @@ transfers with plain libcurl and the handler's AmiSSL setup.
   and tested with the image's curl, so that stays; tools/os4.mk and the
   script now say so, and the script lists what its own curl still needs.
 
-Open: download speed on real hardware; tests against the user's own
-Nextcloud and with public certificates (AmiSSL:Certs).
+## Speed test on an emulated Intel 82574L (2026-11-15, handler 0.36)
+
+The guest now has `-device e1000e` (e1000e.device 0.2 from
+github.com/derfsss/e1000e) instead of the rtl8139, still on slirp;
+`NIC=rtl8139 ./run.sh` brings the old card back. Same 20 MB file, Roadshow
+tcp.sendspace at its default 32768 unless noted.
+
+| Transfer | rtl8139 (above) | e1000e |
+|---|---|---|
+| Bare recv(), HTTP (3 runs) | 1.5-11.7 s, 1.7-13.8 MB/s | 0.77-0.93 s, 21.5-25.9 MB/s |
+| Plain curl GET whole file, HTTP (3 runs) | 1.5-45 s | 1.14-1.17 s, 17.1-17.6 MB/s |
+| Plain curl GET whole file, HTTPS | 45.1 s, 0.44 MB/s | 2.86 s, 7.0 MB/s |
+| Plain curl range GETs as the handler, HTTP / HTTPS | 41.6 / 13.7-17.8 s | 1.97 / 3.69 s, 10.2 / 5.4 MB/s |
+| **Handler download, HTTPS (3 runs)** | 6.7-30.7 s, 0.65-3.0 MB/s | 3.27-3.57 s, 5.6-6.1 MB/s |
+| **Handler download, HTTP (2 runs)** | 26.0-32.3 s, 0.6-0.8 MB/s | 1.53-1.66 s, 12.1-13.1 MB/s |
+| Handler upload, HTTPS (3 runs) | 3.0-3.15 MB/s | 2.85-3.15 MB/s |
+| Handler upload, HTTP (2 runs) | 3.1-3.2 MB/s | 3.3-3.5 MB/s |
+| Plain curl PUT, HTTP / HTTPS | 3.7 / 3.3 MB/s | 3.9 / 3.3 MB/s |
+| Handler upload, tcp.sendspace 65536, HTTP / HTTPS | - | 4.1 / 2.9 MB/s |
+
+- No gaps of 0.5 s or more in any download: the stalls were the rtl8139
+  path. All copies read back byte-identical.
+- Range downloads lose some speed to the server's ~0.1 s until the first
+  byte of each request (it grows to 4 MB requests, so this stays small).
+- Uploads: the handler matches a plain curl PUT. Over HTTPS the emulated
+  CPU (TLS) is the limit; over HTTP a bigger Roadshow send buffer helps a
+  little (bare TCP upload from the guest: 7.3 MB/s, sftp-handler session).
+
+Open: speed on real hardware; tests against the user's own Nextcloud and
+with public certificates (AmiSSL:Certs).
