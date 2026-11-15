@@ -58,10 +58,16 @@ transfers with plain libcurl and the handler's AmiSSL setup.
   above 16 MB, the server joins the chunks). TLS is not the limit; the
   emulated machine's send path is.
 - Downloads: requests that do not stall run at 5-6 MB/s (HTTPS) and
-  10-13 MB/s (HTTP). Some requests stall for 2-20 s; the lengths match
-  doubling TCP retransmit timeouts (1+2+4, 1+2+4+8 s). Plain curl stalls
-  the same way over HTTP and HTTPS, so the cause is the emulated network
-  (probably incoming packets dropped by rtl8139/slirp), not the handler.
+  10-13 MB/s (HTTP). Some requests stall, mostly for about 1.4 s or about
+  14.7 s. Plain curl stalls the same way over HTTP and HTTPS, so the
+  handler's own code is not the cause.
+- A 32 KB socket receive buffer (default 64 KB, `curlspeed ... RCVBUF n`)
+  does not help, so it is not the TCP window. After each long stall the
+  server has closed the keep-alive connection: it had sent everything and
+  curl did not read it. That looks like a missed wakeup. curl waits with
+  clib4's poll() (HAVE_POLL); a plain-TCP FTP download into the same guest
+  (sftp-handler, select()) has no stalls. Next test: curl built without
+  HAVE_POLL, so that it waits with select().
 - Both 20 MB copies read back byte-identical (patfile check).
 
 Open: download speed on real hardware; tests against the user's own

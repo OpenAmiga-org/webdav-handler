@@ -8,11 +8,14 @@
  *   curlspeed URL CREDFILE CAFILE put FILE  one PUT of a local file
  *
  * CREDFILE holds "user:password" on one line (kept off the command line).
+ * A trailing "RCVBUF n" sets the socket receive buffer (TCP window) to n
+ * bytes; the default is printed either way.
  */
 #include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 /* src/os4/amissl.c, the same AmiSSL setup as the handler */
 int  amissl_open(void);
@@ -23,6 +26,27 @@ static size_t on_data(char *p, size_t s, size_t n, void *ud)
 	(void)p;
 	*(curl_off_t *)ud += (curl_off_t)(s * n);
 	return s * n;
+}
+
+static int rcvbuf;
+
+static int on_sockopt(void *ud, curl_socket_t fd, curlsocktype purpose)
+{
+	int v = 0;
+	socklen_t len = sizeof(v);
+
+	(void)ud;
+	(void)purpose;
+	getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &v, &len);
+	if (rcvbuf > 0) {
+		setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+		len = sizeof(rcvbuf);
+		getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, &len);
+		printf("new connection: SO_RCVBUF %d -> %d\n", v, rcvbuf);
+	} else {
+		printf("new connection: SO_RCVBUF %d (default)\n", v);
+	}
+	return CURL_SOCKOPT_OK;
 }
 
 static int get(CURL *c, const char *range, curl_off_t *got, int nr)
@@ -57,6 +81,8 @@ int main(int argc, char **argv)
 
 	if (argc < 5)
 		return 5;
+	if (argc > 6 && strcmp(argv[argc - 2], "RCVBUF") == 0)
+		rcvbuf = atoi(argv[argc - 1]);
 	f = fopen(argv[2], "r");
 	if (f == NULL || fgets(cred, sizeof(cred), f) == NULL)
 		return 10;
@@ -73,6 +99,7 @@ int main(int argc, char **argv)
 	curl_easy_setopt(c, CURLOPT_CAINFO, argv[3]);
 	curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, on_data);
+	curl_easy_setopt(c, CURLOPT_SOCKOPTFUNCTION, on_sockopt);
 	if (strcmp(argv[4], "full") == 0) {
 		get(c, NULL, &got, 1);
 	} else if (strcmp(argv[4], "put") == 0 && argc > 5) {
