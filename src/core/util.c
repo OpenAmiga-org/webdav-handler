@@ -46,6 +46,8 @@ static int sb_reserve(strbuf *sb, size_t extra)
 		sb->failed = 1;
 		return -1;
 	}
+	/* always a string, also before anything was appended */
+	p[sb->len] = '\0';
 	sb->data = p;
 	sb->cap = cap;
 	return 0;

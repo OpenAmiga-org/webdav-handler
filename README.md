@@ -24,7 +24,8 @@ Release archive: `tools/make_lha.sh` -> `dist/NextcloudHandler.lha`.
 ## Building
 
     make linux                     # Linux FUSE test build
-    make test                      # ... and the tests against testserver/
+    make unit                      # unit tests (charset)
+    make test                      # ... unit tests and the tests against testserver/
     tools/build_curl_amissl.sh     # once: libcurl for clib4 with AmiSSL
     tools/build_os4.sh             # AmigaOS 4 handler (walkero/amigagccondocker)
     tools/make_lha.sh              # release archive

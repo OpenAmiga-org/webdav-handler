@@ -81,6 +81,25 @@ int main(void)
 	check("colon back", s, "12:30");
 	free(s);
 
+	/* an empty string converts to "", not to whatever the memory held
+	 * (sb_steal() used to return an unterminated buffer) */
+	{
+		int k;
+
+		for (k = 0; k < 4; k++) {
+			char *junk = malloc(64);
+
+			strcpy(junk, "leftover text from freed memory");
+			free(junk);
+			s = k == 0 ? cs_utf8_to_local(CS_ISO_8859_1, "") :
+			    k == 1 ? cs_local_to_utf8(CS_ISO_8859_1, "") :
+			    k == 2 ? cs_utf8_to_name(CS_ISO_8859_1, "") :
+			             cs_utf8_to_message(CS_ISO_8859_1, "");
+			check("empty string", s, "");
+			free(s);
+		}
+	}
+
 	roundtrip(CS_ISO_8859_1, "R\xC3\xA4ksm\xC3\xB6rg\xC3\xA5s \xE2\x82\xAC \xE6\x97\xA5 100%up %U");
 	roundtrip(CS_ISO_8859_15, "\xC5\xA0koda \xE2\x82\xAC \xC2\xA4 \xF0\x9F\x98\x80");
 	roundtrip(CS_ISO_8859_1, "tab\there");
