@@ -55,6 +55,9 @@ The OS4 build needs the cross-compiler image
   device is removed. The handler takes the seglist out of the device node
   at startup and sets PRF_FREESEGLIST, so its code goes when it ends; the
   filesysbox process is a child (`NP_Child`) that the handler waits for.
+- FFS lets files grow past 2 GiB but cannot seek there, and clib4's
+  pread/pwrite seek on every call; the temp files keep their own position
+  and only seek when an access does not follow the previous one.
 - Deep tests in the AmigaOS 4 guest: `docs/deep_test_plan.md`,
   `tests/os4/` (nchtest, nametest, gentree, scripts in `deep/`) and
   `tests/hostmount.sh` to check the server side from Linux.

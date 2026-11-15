@@ -332,7 +332,9 @@ it in Nextcloud at any time.
   - Changes made on the server by other devices show up after CACHETIME
     seconds (and within a minute in a drawer you are writing to).
   - Files being written are kept in TEMPDIR until they are closed, so
-    TEMPDIR needs room for the biggest file you write at once.
+    TEMPDIR needs room for the biggest file you write at once. With
+    TEMPDIR on an FFS partition, files over 2 GiB can only be written
+    from start to end (as Copy does), because FFS cannot seek past 2 GiB.
   - Only one program can write to a file at a time.
   - With filesysbox.library 54.9 (AmigaOS 4.1 FE Update 3) the handler
     converts file names itself, ISO-8859-1 or ISO-8859-15. Other character
@@ -387,7 +389,7 @@ it in Nextcloud at any time.
 @node History "History"
 @{b}History@{ub}
 
-@{b}0.31 (15.11.2026)@{ub}
+@{b}0.32 (15.11.2026)@{ub}
    - Reading stops with an error when the file is changed on the server
      during the read, instead of giving a mix of both versions.
    - The handler's code is freed when the volume is dismounted (about
@@ -397,6 +399,8 @@ it in Nextcloud at any time.
    - Names with ":" from the server can be used (shown as %u003A).
    - Files show the e bit, so programs on the volume can be started.
    - Line breaks in requesters are shown correctly.
+   - Files over 2 GiB can be written with TEMPDIR on an FFS partition
+     (FFS cannot seek past 2 GiB; the temp file is now used in order).
 
 @{b}0.25 (15.11.2026)@{ub}
    First test version.

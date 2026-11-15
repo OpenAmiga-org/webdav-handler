@@ -25,8 +25,9 @@ int plat_debug_serial = 0;
 int plat_charset = -1;   /* convert messages from UTF-8 when >= 0 */
 
 struct tmpf {
-	int  fd;
-	char path[512];
+	int     fd;
+	int64_t pos;   /* file position, -1 when not known */
+	char    path[512];
 };
 
 static unsigned tmp_counter;
@@ -47,8 +48,10 @@ tmpf *tmpf_create(const char *dir, int *err)
 		         (n > 0 && dir[n - 1] != ':' && dir[n - 1] != '/') ? "/" : "",
 		         (unsigned long)IExec->FindTask(NULL), ++tmp_counter);
 		f->fd = open(f->path, O_RDWR | O_CREAT | O_EXCL, 0600);
-		if (f->fd >= 0)
+		if (f->fd >= 0) {
+			f->pos = 0;
 			return f;
+		}
 		if (errno != EEXIST)
 			break;
 	}
@@ -58,22 +61,64 @@ tmpf *tmpf_create(const char *dir, int *err)
 	return NULL;
 }
 
+/* FFS lets a file grow past 2 GiB but cannot seek to a position at or
+ * above it, and clib4's pread()/pwrite() seek on every call (there and
+ * back). So the position is kept here and only changed when an access
+ * does not continue where the last one ended: files are written and read
+ * in order, which then works at any size. */
+static int tmpf_seek(tmpf *f, int64_t off)
+{
+	struct stat st;
+
+	if (f->pos == off)
+		return 0;
+	f->pos = -1;
+	/* AmigaDOS cannot seek past the end: grow the file first (zeros) */
+	if (fstat(f->fd, &st) != 0)
+		return -errno;
+	if (off > (int64_t)st.st_size && ftruncate(f->fd, (off_t)off) != 0)
+		return -errno;
+	if (lseek(f->fd, (off_t)off, SEEK_SET) < 0)
+		return -errno;
+	f->pos = off;
+	return 0;
+}
+
 int tmpf_pread(tmpf *f, void *buf, size_t len, int64_t off)
 {
-	ssize_t n = pread(f->fd, buf, len, (off_t)off);
+	int err = tmpf_seek(f, off);
+	ssize_t n;
 
-	return n < 0 ? -errno : (int)n;
+	if (err != 0)
+		return err;
+	n = read(f->fd, buf, len);
+	if (n < 0) {
+		f->pos = -1;
+		return -errno;
+	}
+	f->pos += n;
+	return (int)n;
 }
 
 int tmpf_pwrite(tmpf *f, const void *buf, size_t len, int64_t off)
 {
-	ssize_t n = pwrite(f->fd, buf, len, (off_t)off);
+	int err = tmpf_seek(f, off);
+	ssize_t n;
 
-	return n < 0 ? -errno : (int)n;
+	if (err != 0)
+		return err;
+	n = write(f->fd, buf, len);
+	if (n < 0) {
+		f->pos = -1;
+		return -errno;
+	}
+	f->pos += n;
+	return (int)n;
 }
 
 int tmpf_truncate(tmpf *f, int64_t size)
 {
+	f->pos = -1; /* a shorter file may move the position */
 	return ftruncate(f->fd, (off_t)size) == 0 ? 0 : -errno;
 }
 
@@ -86,22 +131,21 @@ int64_t tmpf_size(tmpf *f)
 	return (int64_t)st.st_size;
 }
 
+/* reads from the start in order (see tmpf_seek) */
 static int copy_file(int from, const char *to)
 {
 	char buf[32768];
-	int64_t off = 0;
 	ssize_t n;
 	int out = open(to, O_WRONLY | O_CREAT | O_EXCL, 0600);
 
 	if (out < 0)
 		return -errno;
-	while ((n = pread(from, buf, sizeof(buf), (off_t)off)) > 0) {
+	while ((n = read(from, buf, sizeof(buf))) > 0) {
 		if (write(out, buf, (size_t)n) != n) {
 			close(out);
 			unlink(to);
 			return -EIO;
 		}
-		off += n;
 	}
 	close(out);
 	return n < 0 ? -EIO : 0;
