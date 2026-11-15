@@ -35,6 +35,34 @@ matters.
 | J. Concurrency | Two copies to the volume, a download and an upload at the same time: all byte-identical, no deadlock. |
 | K. Stability | **Found:** about 3 MB lost per mount (the handler code was never unloaded). Fixed in 0.30: 20 mount cycles now end within 8 KB of the start. 1000 file operations: no errors, no crash, no leftover tasks. |
 
-Open: downloads in QEMU reach about 6 MB/s per range request but have
-occasional 13-15 s stalls (to check on real hardware); tests against the
-user's own Nextcloud and with public certificates (AmiSSL:Certs).
+## Speed test (2026-11-15, handler 0.33, 20 MB file, RAM: <-> volume)
+
+QEMU AmigaOne (G3, TCG), rtl8139, user-mode network to the Docker server
+on the host. `tests/os4/speedtest` times Open, the reads/writes and Close
+apart (the upload runs in Close); `tests/os4/curlspeed` does the same
+transfers with plain libcurl and the handler's AmiSSL setup.
+
+| Transfer | Time | MB/s |
+|---|---|---|
+| Handler upload, HTTPS (3 runs) | 6.3-6.6 s | 3.0-3.15 |
+| Handler upload, HTTP (2 runs) | 6.2-6.4 s | 3.1-3.2 |
+| Plain curl PUT, HTTPS / HTTP | 6.0 s / 5.5 s | 3.3 / 3.7 |
+| Handler download, HTTPS (3 runs) | 6.7, 30.7, 24.7 s | 3.0, 0.65, 0.81 |
+| Handler download, HTTP (2 runs) | 26.0, 32.3 s | 0.77, 0.62 |
+| Plain curl GET whole file, HTTPS / HTTP | 45.1 s / 1.5 s | 0.44 / 13.2 |
+| Plain curl range GETs as the handler, HTTPS (2 runs) | 13.7, 17.8 s | 1.5, 1.1 |
+| Plain curl range GETs as the handler, HTTP | 41.6 s | 0.48 |
+| Host (Linux FUSE build, no emulation) up / down | 0.6-1.2 s / 0.5-1.1 s | 17-34 / 19-40 |
+
+- Uploads: the handler costs about 5-10 % over a bare PUT (chunked upload
+  above 16 MB, the server joins the chunks). TLS is not the limit; the
+  emulated machine's send path is.
+- Downloads: requests that do not stall run at 5-6 MB/s (HTTPS) and
+  10-13 MB/s (HTTP). Some requests stall for 2-20 s; the lengths match
+  doubling TCP retransmit timeouts (1+2+4, 1+2+4+8 s). Plain curl stalls
+  the same way over HTTP and HTTPS, so the cause is the emulated network
+  (probably incoming packets dropped by rtl8139/slirp), not the handler.
+- Both 20 MB copies read back byte-identical (patfile check).
+
+Open: download speed on real hardware; tests against the user's own
+Nextcloud and with public certificates (AmiSSL:Certs).

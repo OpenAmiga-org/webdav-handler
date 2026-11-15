@@ -23,7 +23,7 @@ OS4_SRC  = src/os4/main.c src/os4/platform_os4.c src/os4/requesters.c src/os4/am
 GLUE_SRC = src/os4/fbxglue.c
 GLUE_FLAGS = -fno-builtin -fno-tree-loop-distribute-patterns
 
-.PHONY: handler curltest
+.PHONY: handler curltest curlspeed
 
 handler: build/os4/nextcloud-handler
 
@@ -42,3 +42,8 @@ curltest: build/os4/curltest
 
 build/os4/curltest: tests/os4/curltest.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) -lcurl -lssl -lcrypto -lz -lpthread
+
+curlspeed: build/os4/curlspeed
+
+build/os4/curlspeed: tests/os4/curlspeed.c src/os4/amissl.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
