@@ -66,7 +66,7 @@ static void dir_name(int d, char *out, size_t outlen)
 	else
 		snprintf(tmp, sizeof(tmp), "%s%d/%s%d/sub%d/level4_%d", part[(d - 20) % 6 % 5],
 		         (d - 20) % 6, part[(d - 14) % 5], d - 14, d - 6, d);
-	name_out(out, outlen, tmp);
+	snprintf(out, outlen, "%s", tmp);
 }
 
 static long file_size_for(int i, unsigned h)
@@ -96,15 +96,11 @@ static void file_name(int i, char *out, size_t outlen)
 	}
 	snprintf(tmp, sizeof(tmp), fmt, i);
 	if (i % 3 == 0) {
-		name_out(out, outlen, tmp);
+		snprintf(out, outlen, "%s", tmp);
 		return;
 	}
 	dir_name(i % NDIRS, dir, sizeof(dir));
-	{
-		char conv[256];
-		name_out(conv, sizeof(conv), tmp);
-		snprintf(out, outlen, "%s/%s", dir, conv);
-	}
+	snprintf(out, outlen, "%s/%s", dir, tmp);
 }
 
 static void fill(unsigned char *buf, long n, long off, unsigned seed)
@@ -119,7 +115,7 @@ static void fill(unsigned char *buf, long n, long off, unsigned seed)
 
 static void mkdirs(const char *base, const char *rel)
 {
-	char path[600];
+	char path[1200];
 	char *p;
 
 	snprintf(path, sizeof(path), "%s/%s", base, rel);
@@ -221,7 +217,7 @@ int main(int argc, char **argv)
 {
 	int make, big, i;
 	const char *base;
-	char rel[400], path[700];
+	char rel[400], conv[800], path[900];
 	long total = 0, expected_entries;
 
 	if (argc < 3 || (strcmp(argv[1], "make") != 0 && strcmp(argv[1], "check") != 0)) {
@@ -237,8 +233,9 @@ int main(int argc, char **argv)
 	/* drawers: count each one once (the deeper ones include their parents) */
 	for (i = 0; i < NDIRS; i++) {
 		dir_name(i, rel, sizeof(rel));
+		name_out(conv, sizeof(conv), rel);
 		if (make)
-			mkdirs(base, rel);
+			mkdirs(base, conv);
 	}
 	for (i = 0; i < NFILES + big; i++) {
 		long size;
@@ -248,9 +245,11 @@ int main(int argc, char **argv)
 		} else {
 			file_name(i, rel, sizeof(rel));
 		}
+		/* the Latin-1 name decides size and content on every system */
 		h = hash(rel);
 		size = i == NFILES ? 20L * 1024 * 1024 + 12345 : file_size_for(i, h);
-		snprintf(path, sizeof(path), "%s/%s", base, rel);
+		name_out(conv, sizeof(conv), rel);
+		snprintf(path, sizeof(path), "%s/%s", base, conv);
 		if (make)
 			write_file(path, size, h);
 		else

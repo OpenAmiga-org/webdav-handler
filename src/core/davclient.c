@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #define ERRBODY_MAX 4096
 
@@ -36,6 +37,7 @@ struct dav_session {
 	unsigned    upload_seq;
 
 	long        last_status;  /* HTTP status of the last failed request */
+	int         last_kind;    /* DAV_FAIL_* of the last failed request */
 
 	char        curlerr[CURL_ERROR_SIZE];
 	char        errmsg[512];
@@ -67,6 +69,7 @@ typedef struct {
 	int64_t            dl_pos;
 
 	long               status;
+	char               etag[160];   /* ETag header of the response */
 	int                sink_failed;
 	strbuf             errbody;
 } dav_req;
@@ -141,6 +144,11 @@ const char *dav_error(dav_session *s)
 int dav_is_nextcloud(dav_session *s)
 {
 	return s->nextcloud;
+}
+
+int dav_last_kind(dav_session *s)
+{
+	return s->last_kind;
 }
 
 long dav_last_status(dav_session *s)
@@ -226,6 +234,7 @@ static int set_http_error(dav_session *s, dav_req *r)
 	char msg[200];
 
 	s->last_status = r->status;
+	s->last_kind = DAV_FAIL_HTTP;
 	server_message(r->errbody.data, msg, sizeof(msg));
 	snprintf(s->errmsg, sizeof(s->errmsg), "%s %s: HTTP %ld %s%s", r->method,
 	         r->path != NULL ? r->path : (r->url != NULL ? r->url : ""),
@@ -295,6 +304,14 @@ static size_t on_header(char *data, size_t size, size_t n, void *ud)
 		const char *sp = memchr(data, ' ', len);
 		if (sp != NULL)
 			r->status = strtol(sp + 1, NULL, 10);
+		r->etag[0] = '\0';
+	} else if (len > 5 && strncasecmp(data, "ETag:", 5) == 0) {
+		size_t i = 5, k = 0;
+		while (i < len && (data[i] == ' ' || data[i] == '\t'))
+			i++;
+		while (i < len && data[i] != '\r' && data[i] != '\n' && k + 1 < sizeof(r->etag))
+			r->etag[k++] = data[i++];
+		r->etag[k] = '\0';
 	}
 	return len;
 }
@@ -430,6 +447,7 @@ static int perform(dav_session *s, dav_req *r)
 
 	curl_easy_reset(c);
 	s->last_status = 0;
+	s->last_kind = DAV_FAIL_NONE;
 	refresh_resolve(s, 0);
 	s->curlerr[0] = '\0';
 	if (s->resolve != NULL)
@@ -503,6 +521,7 @@ static int perform(dav_session *s, dav_req *r)
 		         r->path != NULL ? r->path : "",
 		         s->curlerr[0] != '\0' ? s->curlerr : curl_easy_strerror(rc));
 		plat_log(LOG_INFO, "%s\n", s->errmsg);
+		s->last_kind = DAV_FAIL_OTHER;
 		if (r->sink_failed)
 			return -EIO;
 		switch (rc) {
@@ -510,15 +529,19 @@ static int perform(dav_session *s, dav_req *r)
 		case CURLE_COULDNT_RESOLVE_PROXY:
 		case CURLE_COULDNT_CONNECT:
 			s->resolved_at = 0; /* look the name up again next time */
+			s->last_kind = DAV_FAIL_NETWORK;
 			return -ENODEV;   /* AmigaDOS shows "no disk" with Retry */
 		case CURLE_OPERATION_TIMEDOUT:
 		case CURLE_SEND_ERROR:
 		case CURLE_RECV_ERROR:
 		case CURLE_GOT_NOTHING:
+			s->last_kind = DAV_FAIL_NETWORK;
 			return -ENODEV;   /* AmigaDOS shows "no disk" with Retry */
 		case CURLE_PEER_FAILED_VERIFICATION:
 		case CURLE_SSL_CONNECT_ERROR:
 		case CURLE_SSL_CACERT_BADFILE:
+		case CURLE_SSL_CERTPROBLEM:
+			s->last_kind = DAV_FAIL_TLS;
 			return -EACCES;
 		case CURLE_OUT_OF_MEMORY:
 			return -ENOMEM;
@@ -870,10 +893,10 @@ out:
 /* --- file transfer --------------------------------------------------- */
 
 int dav_get_range(dav_session *s, const char *path, int64_t off, void *buf,
-                  size_t len, size_t *got)
+                  size_t len, size_t *got, char *etag, size_t etag_size)
 {
 	dav_req r;
-	char range[64];
+	char range[64], match[200];
 	int err;
 
 	*got = 0;
@@ -885,13 +908,29 @@ int dav_get_range(dav_session *s, const char *path, int64_t off, void *buf,
 	snprintf(range, sizeof(range), "Range: bytes=%lld-%lld", (long long)off,
 	         (long long)(off + (int64_t)len - 1));
 	r.headers = curl_slist_append(NULL, range);
-	plat_log(LOG_DEBUG, "%s\n", range);
+	/* the rest of a file must come from the same version of it */
+	if (etag != NULL && etag[0] != '\0') {
+		snprintf(match, sizeof(match), "If-Match: %s", etag);
+		r.headers = curl_slist_append(r.headers, match);
+		plat_log(LOG_DEBUG, "%s, %s\n", range, match);
+	} else {
+		plat_log(LOG_DEBUG, "%s\n", range);
+	}
 	r.range_off = off;
 	err = perform(s, &r);
 	if (err == 0 && r.status == 416)
 		r.status = 206; /* reading at or past the end */
-	if (err == 0 && (r.status < 200 || r.status >= 300))
+	if (err == 0 && r.status == 412 && etag != NULL && etag[0] != '\0') {
+		snprintf(s->errmsg, sizeof(s->errmsg), "%s was changed on the server while it was read",
+		         path);
+		plat_log(LOG_INFO, "%s\n", s->errmsg);
+		s->last_status = r.status;
+		err = -ETXTBSY;
+	} else if (err == 0 && (r.status < 200 || r.status >= 300)) {
 		err = set_http_error(s, &r);
+	}
+	if (err == 0 && etag != NULL && etag[0] == '\0' && r.etag[0] != '\0')
+		snprintf(etag, etag_size, "%s", r.etag);
 	*got = r.got;
 	req_done(&r);
 	return err;

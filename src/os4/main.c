@@ -124,6 +124,7 @@ static struct {
 	int          have_password;
 	int          ask_password;
 	int          cancelled;  /* the password requester was cancelled */
+	int          reported;   /* a connection problem was shown */
 	int          readonly;
 	int          convert;   /* names arrive in the local character set */
 	int          cs;        /* that character set */
@@ -204,6 +205,28 @@ static void save_password(void)
 	}
 }
 
+static void report_problem(void)
+{
+	char msg[1200], title[128];
+	const char *hint;
+	long status = dav_last_status(g.dav);
+
+	if (dav_last_kind(g.dav) == DAV_FAIL_TLS)
+		hint = "The server's certificate could not be checked. If the server\n"
+		       "uses a certificate of its own, give it with CAFILE in the\n"
+		       "DOSDriver; otherwise check that AmiSSL:Certs is up to date.";
+	else if (status == 401 || status == 403)
+		hint = "The server did not accept the user name or password.";
+	else
+		hint = "Check the URL in the DOSDriver.";
+	snprintf(msg, sizeof(msg), "Cannot use %s\n%s\n\n%s\n\n"
+	         "See NextcloudHandler.guide. The volume shows \"no disk\"\n"
+	         "until this is fixed and DiskChange %s: is used.",
+	         g.url, dav_error(g.dav), hint, g.device);
+	snprintf(title, sizeof(title), "%s: %s", g.device, NCH_VERS);
+	plat_report(title, msg);
+}
+
 /* Connects on first use, so that the volume can be mounted at boot before
  * the network is up. Returns 0 or -errno. */
 static int online(void)
@@ -239,6 +262,7 @@ static int online(void)
 			if (remember)
 				save_password();
 			g.connected = 1;
+			g.reported = 0;
 			g.last_try = 0;
 			g.last_err = 0;
 			return 0;
@@ -250,6 +274,13 @@ static int online(void)
 			continue;
 		}
 		break;
+	}
+	/* Network trouble may pass (the volume is often mounted before the
+	 * network is up), so it only gives "no disk". Anything else needs the
+	 * user: say it once, until "DiskChange" or a new mount. */
+	if (dav_last_kind(g.dav) != DAV_FAIL_NETWORK && !g.reported) {
+		g.reported = 1;
+		report_problem();
 	}
 fail:
 	g.last_try = plat_ms();
@@ -465,6 +496,7 @@ void rpc_serve(struct rpc *r)
 		break;
 	case OP_RESET:
 		g.cancelled = 0;
+		g.reported = 0;
 		g.last_try = 0;
 		err = 0;
 		break;

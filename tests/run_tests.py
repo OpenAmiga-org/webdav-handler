@@ -268,6 +268,23 @@ def t_large_and_ranges(d):
         assert f.read(10) == b""
 
 
+def t_changed_while_reading(d):
+    # a file replaced on the server during a read must give an error, not
+    # a mix of the old and the new version
+    old = random.randbytes(3 * 1024 * 1024)
+    assert dav("PUT", d + "/c.bin", old)[0] in (201, 204)
+    with open(m(d + "/c.bin"), "rb", buffering=0) as f:
+        assert f.read(4096) == old[:4096]
+        # Nextcloud's ETag comes from mtime (seconds), inode and size: a
+        # same-size upload in the same second can keep it
+        time.sleep(1.1)
+        assert dav("PUT", d + "/c.bin", bytes(len(old)))[0] in (201, 204)
+        f.seek(2 * 1024 * 1024)
+        expect_errno(errno.ETXTBSY, f.read, 4096)
+    with open(m(d + "/c.bin"), "rb") as f:
+        assert f.read() == bytes(len(old)), "a new open reads the new version"
+
+
 def t_mkdir_rmdir(d):
     os.mkdir(m(d + "/x"))
     assert srv_props(d + "/x")["dir"]
@@ -421,7 +438,7 @@ def t_big_over_2gib(d):
 
 
 TESTS = [t_small_file, t_names, t_case_insensitive, t_overwrite, t_update_in_place,
-         t_empty_file, t_truncate, t_large_and_ranges, t_mkdir_rmdir,
+         t_empty_file, t_truncate, t_large_and_ranges, t_changed_while_reading, t_mkdir_rmdir,
          t_rmdir_sees_server_files, t_rename, t_unlink, t_mtime, t_comment,
          t_server_changes_seen, t_many_files, t_statfs, t_quota_failure, t_readonly]
 

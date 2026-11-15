@@ -60,6 +60,7 @@ struct ncfs_file {
 	size_t            blk_len;
 	size_t            blk_want;
 	int64_t           next_off;
+	char              etag[160];   /* version being read, from the first block */
 
 	/* writing through a local temp file */
 	tmpf             *tf;
@@ -1011,7 +1012,7 @@ int ncfs_read(ncfs *fs, ncfs_file *f, char *buf, size_t size, int64_t off)
 		f->blk = nb;
 		f->blk_cap = want;
 	}
-	err = dav_get_range(fs->dav, f->path, off, f->blk, want, &got);
+	err = dav_get_range(fs->dav, f->path, off, f->blk, want, &got, f->etag, sizeof(f->etag));
 	if (err != 0) {
 		f->blk_len = 0;
 		return err;

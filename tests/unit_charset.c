@@ -71,6 +71,12 @@ int main(void)
 	s = cs_utf8_to_local(CS_ISO_8859_1, "Error: none");
 	check("colon in text", s, "Error: none");
 	free(s);
+	s = cs_utf8_to_message(CS_ISO_8859_1, "Line 1\nLine 2: \xC3\xA5");
+	check("message keeps line breaks", s, "Line 1\nLine 2: \xE5");
+	free(s);
+	s = cs_utf8_to_local(CS_ISO_8859_1, "a\nb");
+	check("text escapes line breaks", s, "a%u000Ab");
+	free(s);
 	s = cs_local_to_utf8(CS_ISO_8859_1, "12%u003A30");
 	check("colon back", s, "12:30");
 	free(s);

@@ -123,7 +123,9 @@ char *cs_local_to_utf8(int cs, const char *local)
 	return sb_steal(&sb);
 }
 
-static char *to_local(int cs, const char *utf8, int is_name)
+enum { TO_TEXT, TO_NAME, TO_MESSAGE };
+
+static char *to_local(int cs, const char *utf8, int mode)
 {
 	const unsigned char *p = (const unsigned char *)utf8;
 	strbuf sb;
@@ -161,8 +163,11 @@ static char *to_local(int cs, const char *utf8, int is_name)
 		}
 		b = cp < 0x80 && cp >= 0x20 && cp != 0x7F ? (int)cp : cp_to_byte(cs, cp);
 		/* AmigaDOS reads ':' in a name as the end of a device name */
-		if (is_name && cp == ':')
+		if (mode == TO_NAME && cp == ':')
 			b = -1;
+		/* requesters show line breaks */
+		if (mode == TO_MESSAGE && (cp == '\n' || cp == '\t'))
+			b = (int)cp;
 		if (b >= 0) {
 			char c = (char)b;
 			sb_append(&sb, &c, 1);
@@ -179,10 +184,15 @@ static char *to_local(int cs, const char *utf8, int is_name)
 
 char *cs_utf8_to_local(int cs, const char *utf8)
 {
-	return to_local(cs, utf8, 0);
+	return to_local(cs, utf8, TO_TEXT);
 }
 
 char *cs_utf8_to_name(int cs, const char *utf8)
 {
-	return to_local(cs, utf8, 1);
+	return to_local(cs, utf8, TO_NAME);
+}
+
+char *cs_utf8_to_message(int cs, const char *utf8)
+{
+	return to_local(cs, utf8, TO_MESSAGE);
 }

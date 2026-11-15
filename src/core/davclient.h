@@ -52,6 +52,10 @@ void dav_free(dav_session *s);
 
 const char *dav_error(dav_session *s);   /* text for the last failure */
 long dav_last_status(dav_session *s);    /* HTTP status of it, 0 if none */
+/* What kind of failure it was: the network (may pass), TLS (certificate),
+ * an HTTP error status, or something else. */
+enum { DAV_FAIL_NONE, DAV_FAIL_NETWORK, DAV_FAIL_TLS, DAV_FAIL_HTTP, DAV_FAIL_OTHER };
+int  dav_last_kind(dav_session *s);
 int  dav_set_password(dav_session *s, const char *password);
 int  dav_is_nextcloud(dav_session *s);
 const char *dav_root_url(dav_session *s);
@@ -60,9 +64,11 @@ int  dav_propfind(dav_session *s, const char *path, int depth, dav_list *out);
 void dav_list_free(dav_list *l);
 
 /* Reads len bytes at off into buf (HTTP Range); *got is set to the bytes
- * read, fewer at the end of the file. */
+ * read, fewer at the end of the file. etag (optional) keeps the version:
+ * empty, it is filled from the response; set, the server must still have
+ * that version, otherwise -ETXTBSY. */
 int  dav_get_range(dav_session *s, const char *path, int64_t off, void *buf,
-                   size_t len, size_t *got);
+                   size_t len, size_t *got, char *etag, size_t etag_size);
 /* Downloads the whole file into f. */
 int  dav_get_file(dav_session *s, const char *path, tmpf *f);
 /* Uploads f as the new content of path. mtime 0 = let the server decide. */

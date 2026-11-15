@@ -187,7 +187,7 @@ int plat_resolve(const char *host, char *ip, size_t iplen)
 
 void plat_report(const char *title, const char *message)
 {
-	char *local = plat_charset >= 0 ? cs_utf8_to_local(plat_charset, message) : NULL;
+	char *local = plat_charset >= 0 ? cs_utf8_to_message(plat_charset, message) : NULL;
 
 	plat_log(LOG_ERR, "%s: %s\n", title, message);
 	req_message(title, local != NULL ? local : message);
