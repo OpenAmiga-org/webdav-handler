@@ -4,15 +4,20 @@
 SDK      = /opt/ppc-amigaos/ppc-amigaos/SDK
 CC       = ppc-amigaos-gcc
 STRIP    = ppc-amigaos-strip
+# libcurl with AmiSSL from tools/build_curl_amissl.sh
+CURLDIR  = build/deps/curl-amissl
+AMISSL   = build/deps/amissl-sdk/AmiSSL/Developer
 CFLAGS   = -O2 -g -Wall -Wextra -Werror -std=gnu11 -mcrt=clib4 \
-           -Isrc/core -Isrc/os4 -I$(SDK)/local/common/include -DCURL_STATICLIB
-LDFLAGS  = -mcrt=clib4 -athread=native -L$(SDK)/local/clib4/lib
+           -Isrc/core -Isrc/os4 -I$(CURLDIR)/include -I$(AMISSL)/include \
+           -I$(SDK)/local/common/include -DCURL_STATICLIB
+LDFLAGS  = -mcrt=clib4 -athread=native -L$(CURLDIR)/lib -L$(AMISSL)/lib/AmigaOS4 \
+           -L$(SDK)/local/clib4/lib
 OBJCOPY  = ppc-amigaos-objcopy
-LIBS     = -lcurl -lssl -lcrypto -lz -lexpat -lpthread
+LIBS     = -lcurl -lamisslstubs -lz -lexpat -lpthread
 STRIPFLAGS = -R.comment --strip-unneeded-rel-relocs
 
 CORE_SRC = src/core/util.c src/core/charset.c src/core/davxml.c src/core/davclient.c src/core/ncfs.c
-OS4_SRC  = src/os4/main.c src/os4/platform_os4.c src/os4/requesters.c
+OS4_SRC  = src/os4/main.c src/os4/platform_os4.c src/os4/requesters.c src/os4/amissl.c
 # The filesysbox callbacks run in other tasks and must not call the C
 # library, so keep the compiler from turning loops into library calls.
 GLUE_SRC = src/os4/fbxglue.c
@@ -36,4 +41,4 @@ build/os4/nextcloud-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(wildca
 curltest: build/os4/curltest
 
 build/os4/curltest: tests/os4/curltest.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) -lcurl -lssl -lcrypto -lz -lpthread

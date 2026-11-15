@@ -616,6 +616,14 @@ static int handler_main(struct DosPacket *pkt)
 	free(argbuf);
 	argbuf = NULL;
 
+	if (amissl_open() != 0) {
+		req_message(NCH_VERS, "This handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
+		            "AmiSSL: https://github.com/jens-maus/amissl/releases\n"
+		            "or OS4Depot: library/misc/amissl.lha");
+		err = ERROR_INVALID_RESIDENT_LIBRARY;
+		goto fail;
+	}
+
 	g.dav = dav_new(&g.dc);
 	g.fs = g.dav != NULL ? ncfs_new(g.dav, &g.fo) : NULL;
 	if (g.fs == NULL) {
@@ -658,6 +666,7 @@ fail:
 	free((char *)g.fo.keepdir);
 	memset(g.password, 0, sizeof(g.password));
 	fbx_stop();
+	amissl_close();
 	req_close_libs();
 	return err == 0 ? RETURN_OK : RETURN_FAIL;
 }

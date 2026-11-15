@@ -13,6 +13,10 @@ void req_message(const char *title, const char *text);
 int  req_password(const char *device, const char *user, const char *server,
                   const char *problem, char *buf, size_t buflen, int *remember);
 
+/* amissl.c: 0, -1 (no bsdsocket.library) or -2 (no usable AmiSSL) */
+int  amissl_open(void);
+void amissl_close(void);
+
 /* platform_os4.c */
 extern int plat_debug_serial;
 extern int plat_charset;   /* messages are converted to it, -1 = no */

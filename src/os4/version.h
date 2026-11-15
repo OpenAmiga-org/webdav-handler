@@ -3,7 +3,7 @@
 #define NCH_VERSION_H
 
 #define NCH_VERSION  0
-#define NCH_REVISION 22
+#define NCH_REVISION 25
 #define NCH_DATE     "15.11.2026"
 
 #define NCH_STR2(x) #x
