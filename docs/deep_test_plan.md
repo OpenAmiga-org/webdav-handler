@@ -62,13 +62,30 @@ transfers with plain libcurl and the handler's AmiSSL setup.
   14.7 s. Plain curl stalls the same way over HTTP and HTTPS, so the
   handler's own code is not the cause.
 - A 32 KB socket receive buffer (default 64 KB, `curlspeed ... RCVBUF n`)
-  does not help, so it is not the TCP window. After each long stall the
-  server has closed the keep-alive connection: it had sent everything and
-  curl did not read it. That looks like a missed wakeup. curl waits with
-  clib4's poll() (HAVE_POLL); a plain-TCP FTP download into the same guest
-  (sftp-handler, select()) has no stalls. Next test: curl built without
-  HAVE_POLL, so that it waits with select().
+  does not help, so it is not the TCP window.
+- Cause: the emulated network, not curl or the wait call. `curlspeed ...
+  raw` reads with a blocking recv() straight on a bsdsocket.library socket
+  (no curl, no clib4, no select/poll). Interleaved with curl in one
+  session (HTTP, whole file):
+
+  | Round | bare recv() | curl (clib4 poll) |
+  |---|---|---|
+  | 1 | 1.45 s, 13.8 MB/s | 1.65 s, 12.1 MB/s |
+  | 2 | 1.59 s, 12.5 MB/s | 1.63 s, 12.2 MB/s |
+  | 3 | 11.67 s, 1.7 MB/s (7 gaps of 1.47-1.48 s) | 1.79 s, 11.2 MB/s |
+
+  The gaps are always about 1.48 s, with 88-366 KB between them; a long
+  "stall" is a run of them (17 in a row = 25 s in one 4 MB range). That
+  looks like a TCP retransmit timeout after lost packets (slirp's BSD
+  TCP: 500 ms ticks, 1 s minimum). The sftp-handler session saw the same
+  with its own select() code (FTP download 0.31 to 11.5 MB/s between
+  runs). Good and bad phases come and go.
 - Both 20 MB copies read back byte-identical (patfile check).
+- Found on the way: the OS4 builds link the cross-compiler image's
+  libcurl.a, not the one from tools/build_curl_amissl.sh (`-mcrt=clib4`
+  searches the SDK's clib4 lib directory first). Every release was built
+  and tested with the image's curl, so that stays; tools/os4.mk and the
+  script now say so, and the script lists what its own curl still needs.
 
 Open: download speed on real hardware; tests against the user's own
 Nextcloud and with public certificates (AmiSSL:Certs).

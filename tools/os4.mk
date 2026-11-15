@@ -4,7 +4,12 @@
 SDK      = /opt/ppc-amigaos/ppc-amigaos/SDK
 CC       = ppc-amigaos-gcc
 STRIP    = ppc-amigaos-strip
-# libcurl with AmiSSL from tools/build_curl_amissl.sh
+# -lcurl below is the cross-compiler image's own libcurl.a 8.21.0
+# (SDK/local/clib4/lib, clib4 sockets, TLS through the AmiSSL stubs):
+# -mcrt=clib4 searches that directory before any -L directory. Every
+# release so far was built and tested with it. The curl from
+# tools/build_curl_amissl.sh only supplies the (same version) headers;
+# see that script for why its library is not used.
 CURLDIR  = build/deps/curl-amissl
 AMISSL   = build/deps/amissl-sdk/AmiSSL/Developer
 CFLAGS   = -O2 -g -Wall -Wextra -Werror -std=gnu11 -mcrt=clib4 \

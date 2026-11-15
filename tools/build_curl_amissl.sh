@@ -5,6 +5,17 @@
 # The handler opens AmiSSL itself (src/os4/amissl.c). curl's configure
 # links with -lamisslauto, which the AmiSSL SDK only has for newlib and
 # clib2, so a tiny replacement that only defines IAmiSSL is used.
+#
+# NOTE (2026-11-15): the handler does not link this libcurl.a, only its
+# headers; tools/os4.mk links the cross-compiler image's libcurl.a. This
+# build calls bsdsocket.library directly (the program must provide
+# ISocket) but is compiled with clib4's headers, and that does not work
+# yet: curl ORs clib4's SOCK_NONBLOCK (O_NONBLOCK) into the socket type,
+# which Roadshow refuses (EPROTONOSUPPORT); clib4's AF_INET6 is 10; curl
+# waits with clib4's poll() and makes its wakeup pipe with clib4's pipe(),
+# neither of which knows bsdsocket descriptors (needs ac_cv_func_poll=no
+# and --disable-socketpair). Found while chasing download stalls in QEMU,
+# which turned out to be the emulated network (docs/deep_test_plan.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

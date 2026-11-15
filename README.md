@@ -26,7 +26,7 @@ Release archive: `tools/make_lha.sh` -> `dist/NextcloudHandler.lha`.
     make linux                     # Linux FUSE test build
     make unit                      # unit tests (charset)
     make test                      # ... unit tests and the tests against testserver/
-    tools/build_curl_amissl.sh     # once: libcurl for clib4 with AmiSSL
+    tools/build_curl_amissl.sh     # once: curl headers (its library is not linked)
     tools/build_os4.sh             # AmigaOS 4 handler (walkero/amigagccondocker)
     tools/make_lha.sh              # release archive
 
@@ -44,6 +44,10 @@ The OS4 build needs the cross-compiler image
   message; `nch_entry` runs first (renamed to `_start` after linking).
 - curl's threaded resolver does not work with clib4; the handler resolves
   names itself and passes them with CURLOPT_RESOLVE.
+- The handler links the cross-compiler image's libcurl.a (clib4 sockets,
+  TLS through the AmiSSL stubs): `-mcrt=clib4` searches the SDK's clib4
+  lib directory before any `-L` directory. A curl of our own that calls
+  bsdsocket.library directly needs fixes first (tools/build_curl_amissl.sh).
 - filesysbox 54.9 does not convert file names to the local character set,
   so the handler converts Latin-1/ISO-8859-15 <-> UTF-8 itself.
 - Writes go to a temp file and are uploaded on Close (Nextcloud chunked
