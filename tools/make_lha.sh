@@ -11,10 +11,14 @@
 #     L/nextcloud-handler
 #     Devs/DOSDrivers/NC0             example DOSDriver
 #   NextcloudHandler.readme           OS4Depot readme
+#
+# The LHA and the readme are also copied to $RELEASES (default: the shared
+# folder's releases/), when that folder exists.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LHA="${LHA:-$HOME/linux_archivers/lha/lha}"
+RELEASES="${RELEASES:-/media/sf_claude_folder/releases}"
 STAGE="$ROOT/build/stage"
 OUT="$ROOT/dist/NextcloudHandler.lha"
 LIC="$ROOT/build/deps/licenses"
@@ -88,3 +92,9 @@ rm -f "$OUT"
 (cd "$STAGE" && "$LHA" aq2o5 "$OUT" NextcloudHandler.info NextcloudHandler.readme NextcloudHandler)
 "$LHA" l "$OUT" | tail -n +1
 echo "version $ver -> $OUT"
+if [ -d "$RELEASES" ]; then
+	cp -p "$OUT" "$STAGE/NextcloudHandler.readme" "$RELEASES/"
+	echo "copied LHA and readme to $RELEASES"
+else
+	echo "note: $RELEASES not found, nothing copied" >&2
+fi
