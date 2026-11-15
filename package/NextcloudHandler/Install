@@ -12,6 +12,9 @@
   (cat "This installs " #app ", which shows your Nextcloud files as a volume.\n"
        "It copies the handler to L: and creates a DOSDriver."))
 
+; Novice mode would not ask for the server and user name
+(if (= @user-level 0) (user 1))
+
 ; --- requirements -------------------------------------------------------
 
 (procedure P_CHECK #lib #minver #minrev #what #where
