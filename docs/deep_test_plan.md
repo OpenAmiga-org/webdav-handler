@@ -155,3 +155,20 @@ ISO-8859-15 system; the earlier tests set CHARSET= in the DOSDriver).
 ENV:Charset is now read with dos.library's GetVar(). Long server messages
 (a Nextcloud 401 text is over 300 characters) made requesters wider than
 the screen; requester texts are now broken at 76 characters.
+
+## Install script, upgrade from 0.37 (2026-11-17, release archive 0.39)
+
+Guest set up as a 0.37 user: L:nextcloud-handler 0.37 (built from
+c575a14), DEVS:DOSDrivers/NC0 (+ icon, Activate=1, Startup with URL=,
+USER=, VOLUME=Nextcloud, CAFILE=), the password in
+ENV(ARC):NextcloudHandler/NC0.auth, NC0: mounted and in use; clib4 2.5
+first in LIBS:. The 0.39 archive was unpacked in RAM: and Install started
+from its icon (WBRun), Intermediate user.
+
+| Run | Result |
+|---|---|
+| 1: upgrade | L:nextcloud-handler 0.39 (the old one, in use by NC0:, moved to L:nextcloud-handler.old as planned), SYS:Prefs/nchprefs + icon, DEVS:DOSDrivers/NCH + icon, docs in SYS:Documentation/NextcloudHandler, NCH: mounted, nchprefs started: took over DEVS:DOSDrivers/NC0 as server "Nextcloud", Save wrote ENV: and ENVARC:servers.xml, Delete removed NC0, NC0.info and both .auth files; `Dir NCH:Nextcloud` lists the files with the taken-over password; no install log file left |
+| 2: again, NCH: mounted and in use | "NCH: is mounted ... stops it" message, NCH: dismounted, files replaced without .old, "DEVS:DOSDrivers/NCH exists already. Replace it?", NCH: mounted again and working |
+
+Not tested: mounting NCH: at boot (the guest's own clib4.library is 2.0).
+Everything was removed from the guest afterwards.
