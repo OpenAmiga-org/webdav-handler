@@ -1,4 +1,4 @@
-/* nextcloud-handler - WebDAV client on top of libcurl. Public domain. */
+/* webdav-handler - WebDAV client on top of libcurl. Public domain. */
 #include "davclient.h"
 #include "davxml.h"
 #include "util.h"
@@ -30,6 +30,7 @@ struct dav_session {
 	char       *root_dec;     /* decoded root_path */
 	char       *root_url;     /* origin + root_path + "/" */
 	int         nextcloud;
+	int         kind;         /* DAV_KIND_* asked for */
 	char       *uploads_url;  /* Nextcloud chunked upload folder, or NULL */
 	struct curl_slist *resolve; /* host:port:address for curl */
 	int64_t     resolved_at;
@@ -102,6 +103,7 @@ dav_session *dav_new(const dav_config *cfg)
 	s->proxy = dupnull(cfg->proxy);
 	s->user_agent = dupnull(cfg->user_agent);
 	s->insecure = cfg->insecure;
+	s->kind = cfg->kind;
 	s->connect_timeout = cfg->connect_timeout > 0 ? cfg->connect_timeout : 20;
 	s->io_timeout = cfg->io_timeout > 0 ? cfg->io_timeout : 60;
 	s->chunk_size = cfg->chunk_size > 0 ? cfg->chunk_size : (int64_t)16 * 1024 * 1024;
@@ -852,8 +854,12 @@ int dav_connect(dav_session *s)
 	if (err != 0)
 		goto out;
 
-	if (strstr(path, "/remote.php/") != NULL) {
-		/* a full WebDAV URL was given */
+	if (s->kind == DAV_KIND_WEBDAV) {
+		/* plain WebDAV, also on a Nextcloud server: the URL is the folder */
+		s->nextcloud = 0;
+		err = set_root(s, path);
+	} else if (strstr(path, "/remote.php/") != NULL) {
+		/* a full Nextcloud (or ownCloud) WebDAV URL was given */
 		s->nextcloud = 1;
 		err = set_root(s, path);
 	} else {
@@ -861,6 +867,13 @@ int dav_connect(dav_session *s)
 		if (err == 0) {
 			s->nextcloud = 1;
 		} else if (err == -EACCES || err == -ENODEV || err == -ENOMEM) {
+			goto out;
+		} else if (s->kind == DAV_KIND_NEXTCLOUD) {
+			snprintf(s->errmsg, sizeof(s->errmsg),
+			         "No Nextcloud server at %s%s (the type is set to Nextcloud)",
+			         s->origin, path);
+			s->last_kind = DAV_FAIL_OTHER;
+			err = -ENOENT;
 			goto out;
 		} else {
 			/* not Nextcloud: use the URL as a plain WebDAV folder */
@@ -870,6 +883,11 @@ int dav_connect(dav_session *s)
 	}
 	if (err != 0)
 		goto out;
+	if (!s->nextcloud) {
+		/* no Nextcloud chunked upload on plain WebDAV */
+		free(s->uploads_url);
+		s->uploads_url = NULL;
+	}
 
 	err = dav_propfind(s, "/", 0, &l);
 	if (err == 0) {
@@ -929,7 +947,11 @@ int dav_get_range(dav_session *s, const char *path, int64_t off, void *buf,
 	} else if (err == 0 && (r.status < 200 || r.status >= 300)) {
 		err = set_http_error(s, &r);
 	}
-	if (err == 0 && etag != NULL && etag[0] == '\0' && r.etag[0] != '\0')
+	/* A weak ETag (W/"...") never matches If-Match; Apache, for one, gives
+	 * weak ETags for files changed within the last second. Such a read
+	 * goes on without the check. */
+	if (err == 0 && etag != NULL && etag[0] == '\0' && r.etag[0] != '\0' &&
+	    strncmp(r.etag, "W/", 2) != 0)
 		snprintf(etag, etag_size, "%s", r.etag);
 	*got = r.got;
 	req_done(&r);

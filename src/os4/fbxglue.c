@@ -1,4 +1,4 @@
-/* nextcloud-handler - filesysbox callbacks. They run in the filesysbox
+/* webdav-handler - filesysbox callbacks. They run in the filesysbox
  * process and in the tasks of programs using the volume, so they use Exec
  * only and pass every call to the handler process (see rpc.h).
  *
@@ -14,7 +14,7 @@
 
 #include "rpc.h"
 
-#define ID_NXC_DISK   0x4E584301UL   /* 'NXC\1' */
+#define ID_WDV_DISK   0x57445601UL   /* 'WDV\1' */
 #define COMMENT_XATTR "user.amiga_comment"
 
 /* errno values as filesysbox.library (built with newlib) reads them */
@@ -445,7 +445,7 @@ static int32 fbx_process(STRPTR args, int32 len, struct ExecBase *sysbase)
 	/* replies the startup packet, with success or failure */
 	fs = IFileSysBox->FbxSetupFSTags(startup_pkt->dp_Link, &nc_ops, sizeof(nc_ops), NULL,
 		FBXT_FSFLAGS, flags,
-		FBXT_DOSTYPE, ID_NXC_DISK,
+		FBXT_DOSTYPE, ID_WDV_DISK,
 		FBXT_GET_CONTEXT, &_fuse_context_,
 		TAG_END);
 	if (fs != NULL) {

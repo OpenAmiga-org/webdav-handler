@@ -172,3 +172,31 @@ from its icon (WBRun), Intermediate user.
 
 Not tested: mounting NCH: at boot (the guest's own clib4.library is 2.0).
 Everything was removed from the guest afterwards.
+
+## WebDAV Handler 0.41 (2026-11-17): renamed, any WebDAV server
+
+Nextcloud Handler became WebDAV Handler (webdav-handler, device WDV:,
+wdvprefs, ENV:WebDAVHandler). The sections above keep the old names.
+
+Linux: `tests/run_tests.py` 27/27 against Nextcloud (new: t_server_types:
+Type WebDAV on a Nextcloud address keeps no dates, an Apache server next to
+Nextcloud, copies both ways, Type Nextcloud on Apache refused) and
+`--webdav` 25/25 against Apache mod_dav (testserver/webdav.sh). Found
+there: Apache gives a weak ETag for a second after a change, so If-Match
+failed and fresh files could not be read in ranges ("object is in use");
+weak ETags are no longer used for If-Match.
+
+AmigaOS 4 guest, Install 0.40 over a Nextcloud Handler 0.39 setup (NCH:
+mounted with a Nextcloud and an Apache server, plus a 0.37 DOSDriver NC0):
+
+| Check | Result |
+|---|---|
+| Install | asks to remove Nextcloud Handler, stops NCH:, deletes L:nextcloud-handler, nchprefs and the DOSDriver NCH; installs 0.40, DEVS:DOSDrivers/WDV, ENV(ARC):Sys/def_WDV.info; mounts WDV: |
+| Volume icon | Workbench shows the WebDAV: volume with def_WDV (the new OS 4.1 style icon) |
+| wdvprefs | takes over the 0.39 list (Home, Apache) and NC0 (OldCloud, password from the .auth file); Type chooser; Test connection on Apache: "WebDAV (no Nextcloud found)"; Type Nextcloud on Apache: "No Nextcloud server at ..."; Save, then Delete removes NC0 and ENV(ARC):NextcloudHandler (0.41) |
+| WDV: | Nextcloud and Apache drawers; copy between them; FileNote kept on Apache; SetDate on Apache accepted (date unchanged); Copy CLONE Apache -> Nextcloud keeps the comment |
+| clib4 2.0 | **Found:** with Activate=1 and the guest's clib4 2.0, the handler hung the boot (clib4's startup quits without answering the startup packet). 0.41 checks the version first (as sftp-handler): requester "needs clib4.library 2.5", the device does not start, DIR fails at once |
+
+The boot hang was repaired by setting the DOSDriver's Activate to 0
+directly in the stopped guest's disk image (one byte in an FFS data block),
+then removing the test files from the running guest.

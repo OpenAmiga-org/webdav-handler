@@ -1,4 +1,4 @@
-/* nextcloud-handler - platform functions for AmigaOS 4 (clib4).
+/* webdav-handler - platform functions for AmigaOS 4 (clib4).
  * Public domain. */
 #include "platform.h"
 #include "charset.h"
@@ -227,7 +227,7 @@ void plat_log(int level, const char *fmt, ...)
 	va_start(ap, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
-	IExec->DebugPrintF("[nextcloud-handler] %s", buf);
+	IExec->DebugPrintF("[webdav-handler] %s", buf);
 }
 
 int plat_resolve(const char *host, char *ip, size_t iplen)
@@ -264,7 +264,7 @@ int plat_ask_password(const char *server, const char *user, const char *url,
 	char *ltext, *ltitle;
 	int ok;
 
-	snprintf(title, sizeof(title), "nextcloud-handler: %s", server);
+	snprintf(title, sizeof(title), "webdav-handler: %s", server);
 	snprintf(text, sizeof(text), "%s%sPassword of \"%s\" on\n%s",
 	         problem != NULL ? problem : "", problem != NULL ? "\n\n" : "", user, url);
 	ltext = to_local(text);

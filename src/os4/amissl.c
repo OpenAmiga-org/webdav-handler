@@ -1,4 +1,4 @@
-/* nextcloud-handler - opens AmiSSL for curl's TLS. AmiSSL is set up per
+/* webdav-handler - opens AmiSSL for curl's TLS. AmiSSL is set up per
  * task; all network work happens in the handler process (main.c), so this
  * is called there. Public domain. */
 #include <proto/exec.h>

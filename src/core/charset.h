@@ -1,11 +1,11 @@
-/* nextcloud-handler - conversion between the Amiga's 8-bit character set
+/* webdav-handler - conversion between the Amiga's 8-bit character set
  * and UTF-8 (used on the server). Public domain.
  *
  * Characters that the local character set cannot show become "%uXXXX"
  * (or "%UXXXXXX" above U+FFFF), so that every server name can be shown,
  * opened and renamed on the Amiga and converts back to the same name. */
-#ifndef NCH_CHARSET_H
-#define NCH_CHARSET_H
+#ifndef WDV_CHARSET_H
+#define WDV_CHARSET_H
 
 #include <stddef.h>
 

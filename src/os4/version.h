@@ -1,14 +1,14 @@
-/* nextcloud-handler version; tools/build_os4.sh bumps NCH_REVISION. */
-#ifndef NCH_VERSION_H
-#define NCH_VERSION_H
+/* webdav-handler version; tools/build_os4.sh bumps WDV_REVISION. */
+#ifndef WDV_VERSION_H
+#define WDV_VERSION_H
 
-#define NCH_VERSION  0
-#define NCH_REVISION 39
-#define NCH_DATE     "17.11.2026"
+#define WDV_VERSION  0
+#define WDV_REVISION 41
+#define WDV_DATE     "17.11.2026"
 
-#define NCH_STR2(x) #x
-#define NCH_STR(x)  NCH_STR2(x)
-#define NCH_VERS    "nextcloud-handler " NCH_STR(NCH_VERSION) "." NCH_STR(NCH_REVISION)
-#define NCH_VERSTAG "\0$VER: " NCH_VERS " (" NCH_DATE ")"
+#define WDV_STR2(x) #x
+#define WDV_STR(x)  WDV_STR2(x)
+#define WDV_VERS    "webdav-handler " WDV_STR(WDV_VERSION) "." WDV_STR(WDV_REVISION)
+#define WDV_VERSTAG "\0$VER: " WDV_VERS " (" WDV_DATE ")"
 
 #endif

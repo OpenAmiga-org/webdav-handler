@@ -1,4 +1,4 @@
-/* nchtest - checks AmigaDOS behaviour of a nextcloud-handler volume.
+/* nchtest - checks AmigaDOS behaviour of a webdav-handler volume.
  * Test tool, not part of the release. Public domain.
  *
  *   nchtest DIR       DIR is created on the volume, e.g. NC1:nchtest

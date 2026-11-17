@@ -1,4 +1,4 @@
-/* nextcloud-handler - filesystem operations on top of WebDAV, with a
+/* webdav-handler - filesystem operations on top of WebDAV, with a
  * metadata cache. Public domain. */
 #include "ncfs.h"
 #include "util.h"
@@ -1414,6 +1414,12 @@ int ncfs_utimens(ncfs *fs, const char *path, time_t mtime)
 	if (f != NULL && f->dirty) {
 		/* sent along with the upload */
 		f->set_mtime = mtime;
+		free(real);
+		return 0;
+	}
+	if (!dav_is_nextcloud(fs->dav)) {
+		/* plain WebDAV cannot set a date: accept it without effect, as
+		 * the protection bits, so that copying with CLONE works */
 		free(real);
 		return 0;
 	}

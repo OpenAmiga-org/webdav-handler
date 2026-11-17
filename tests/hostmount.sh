@@ -9,10 +9,10 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/testserver/local/env"
-WORK=${NCH_TESTDIR:-/tmp/nch-hostmount}
+WORK=${WDV_TESTDIR:-/tmp/nch-hostmount}
 export MNT=$WORK/mnt
 mkdir -p "$MNT" "$WORK/tmp" "$WORK/kept"
-NCH_PASSWORD=$NC_APP_PASS "$ROOT/build/linux/nextcloud-fuse" --url "$NC_HTTPS" --user "$NC_USER" \
+WDV_PASSWORD=$NC_APP_PASS "$ROOT/build/linux/webdav-fuse" --url "$NC_HTTPS" --user "$NC_USER" \
 	--cafile "$ROOT/testserver/local/ca.crt" --cache-ms 0 --tempdir "$WORK/tmp" \
 	--keepdir "$WORK/kept" --verbose "$MNT" -f < /dev/null > "$WORK/fuse.log" 2>&1 &
 PID=$!

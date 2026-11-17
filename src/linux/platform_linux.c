@@ -1,4 +1,4 @@
-/* nextcloud-handler - platform functions for the Linux test build.
+/* webdav-handler - platform functions for the Linux test build.
  * Public domain. */
 #define _GNU_SOURCE
 #include "platform.h"
@@ -108,7 +108,7 @@ void plat_log(int level, const char *fmt, ...)
 	if (level > plat_loglevel)
 		return;
 	va_start(ap, fmt);
-	fputs("[nch] ", stderr);
+	fputs("[wdv] ", stderr);
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
 }
@@ -123,18 +123,18 @@ int plat_resolve(const char *host, char *ip, size_t iplen)
 
 void plat_report(const char *title, const char *message)
 {
-	fprintf(stderr, "[nch] *** %s ***\n%s\n", title, message);
+	fprintf(stderr, "[wdv] *** %s ***\n%s\n", title, message);
 }
 
-/* No requester on Linux: the tests give the answer in NCH_ASK_PASSWORD
- * (unset = Cancel) and NCH_REMEMBER=1. Every question is logged. */
+/* No requester on Linux: the tests give the answer in WDV_ASK_PASSWORD
+ * (unset = Cancel) and WDV_REMEMBER=1. Every question is logged. */
 int plat_ask_password(const char *server, const char *user, const char *url,
                       const char *problem, char *buf, size_t buflen, int *remember)
 {
-	const char *pw = getenv("NCH_ASK_PASSWORD");
-	const char *rem = getenv("NCH_REMEMBER");
+	const char *pw = getenv("WDV_ASK_PASSWORD");
+	const char *rem = getenv("WDV_REMEMBER");
 
-	fprintf(stderr, "[nch] password requester: %s (%s at %s)%s%s\n", server, user, url,
+	fprintf(stderr, "[wdv] password requester: %s (%s at %s)%s%s\n", server, user, url,
 	        problem != NULL ? " - " : "", problem != NULL ? problem : "");
 	*remember = rem != NULL && rem[0] == '1';
 	if (pw == NULL)

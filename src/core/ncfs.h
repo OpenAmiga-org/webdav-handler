@@ -1,9 +1,9 @@
-/* nextcloud-handler - filesystem operations on top of WebDAV, with a
+/* webdav-handler - filesystem operations on top of WebDAV, with a
  * metadata cache. The OS4 (filesysbox) and Linux (FUSE) front ends call
  * these. Paths are UTF-8, "/" is the root. Errors are -errno.
  * Public domain. */
-#ifndef NCH_NCFS_H
-#define NCH_NCFS_H
+#ifndef WDV_NCFS_H
+#define WDV_NCFS_H
 
 #include <stddef.h>
 #include <stdint.h>

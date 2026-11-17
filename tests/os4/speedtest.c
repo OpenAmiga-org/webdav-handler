@@ -1,5 +1,5 @@
 /* speedtest - times a file copy with dos.library. Open, the reads, the
- * writes and each Close are timed apart, because nextcloud-handler writes
+ * writes and each Close are timed apart, because webdav-handler writes
  * to a temp file and uploads on Close.
  * Test tool, not part of the release. Public domain.
  *

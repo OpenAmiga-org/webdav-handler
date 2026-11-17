@@ -1,17 +1,19 @@
 #!/bin/bash
-# Puts the release together and packs it: dist/NextcloudHandler.lha
+# Puts the release together and packs it: dist/WebDAVHandler.lha
 #
 #   tools/make_lha.sh      (after tools/build_os4.sh)
 #
 # Layout:
-#   NextcloudHandler/                 drawer (+ icon)
+#   WebDAVHandler/                 drawer (+ icon)
 #     Install                         Installation Utility script
-#     NextcloudHandler.guide          documentation
+#     WebDAVHandler.guide          documentation
 #     LICENSE.txt, Third-party.txt
-#     L/nextcloud-handler
-#     Prefs/nchprefs                  prefs program (the server list)
-#     Devs/DOSDrivers/NCH             DOSDriver
-#   NextcloudHandler.readme           OS4Depot readme
+#     L/webdav-handler
+#     Prefs/wdvprefs                  prefs program (the server list)
+#     Prefs/Env-Archive/Sys/def_WDV.info   icon of the WDV: volume (Install
+#                                     copies it to ENVARC:Sys and ENV:Sys)
+#     Devs/DOSDrivers/WDV             DOSDriver
+#   WebDAVHandler.readme           OS4Depot readme
 #
 # The LHA and the readme are also copied to $RELEASES (default: the shared
 # folder's releases/), when that folder exists.
@@ -21,52 +23,52 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LHA="${LHA:-$HOME/linux_archivers/lha/lha}"
 RELEASES="${RELEASES:-/media/sf_claude_folder/releases}"
 STAGE="$ROOT/build/stage"
-OUT="$ROOT/dist/NextcloudHandler.lha"
+OUT="$ROOT/dist/WebDAVHandler.lha"
 LIC="$ROOT/build/deps/licenses"
 VH="$ROOT/src/os4/version.h"
 
-ver=$(sed -n 's/^#define NCH_VERSION  *\([0-9]*\)/\1/p' "$VH").$(sed -n 's/^#define NCH_REVISION \([0-9]*\)/\1/p' "$VH")
-amigadate=$(sed -n 's/^#define NCH_DATE *"\(.*\)"/\1/p' "$VH")
+ver=$(sed -n 's/^#define WDV_VERSION  *\([0-9]*\)/\1/p' "$VH").$(sed -n 's/^#define WDV_REVISION \([0-9]*\)/\1/p' "$VH")
+amigadate=$(sed -n 's/^#define WDV_DATE *"\(.*\)"/\1/p' "$VH")
 isodate=$(date +%Y%m%d)
-bin="$ROOT/build/os4/nextcloud-handler"
-prefs="$ROOT/build/os4/nchprefs"
+bin="$ROOT/build/os4/webdav-handler"
+prefs="$ROOT/build/os4/wdvprefs"
 
-if ! strings "$bin" | grep -c "nextcloud-handler $ver " > /dev/null; then
-	echo "build/os4/nextcloud-handler is not version $ver; run tools/build_os4.sh" >&2
+if ! strings "$bin" | grep -c "webdav-handler $ver " > /dev/null; then
+	echo "build/os4/webdav-handler is not version $ver; run tools/build_os4.sh" >&2
 	exit 1
 fi
-if ! strings "$prefs" | grep -c "nchprefs $ver " > /dev/null; then
-	echo "build/os4/nchprefs is not version $ver; run tools/build_os4.sh" >&2
+if ! strings "$prefs" | grep -c "wdvprefs $ver " > /dev/null; then
+	echo "build/os4/wdvprefs is not version $ver; run tools/build_os4.sh" >&2
 	exit 1
 fi
 
 # every release says what changed: the readme and the guide need an entry
 # for this version
-if ! grep -q "^- $ver (" "$ROOT/package/NextcloudHandler.readme"; then
-	echo "package/NextcloudHandler.readme has no History entry \"- $ver (...)\"" >&2
+if ! grep -q "^- $ver (" "$ROOT/package/WebDAVHandler.readme"; then
+	echo "package/WebDAVHandler.readme has no History entry \"- $ver (...)\"" >&2
 	exit 1
 fi
-if ! grep -q "^@{b}$ver (" "$ROOT/package/NextcloudHandler/NextcloudHandler.guide"; then
-	echo "NextcloudHandler.guide has no History entry for $ver" >&2
+if ! grep -q "^@{b}$ver (" "$ROOT/package/WebDAVHandler/WebDAVHandler.guide"; then
+	echo "WebDAVHandler.guide has no History entry for $ver" >&2
 	exit 1
 fi
 
 rm -rf "$STAGE"
-D="$STAGE/NextcloudHandler"
-mkdir -p "$D/L" "$D/Prefs" "$D/Devs/DOSDrivers" "$ROOT/dist"
+D="$STAGE/WebDAVHandler"
+mkdir -p "$D/L" "$D/Prefs/Env-Archive/Sys" "$D/Devs/DOSDrivers" "$ROOT/dist"
 
-cp "$bin" "$D/L/nextcloud-handler"
-cp "$prefs" "$D/Prefs/nchprefs"
-cp "$ROOT/package/NextcloudHandler/Install" "$D/"
-cp "$ROOT/package/NextcloudHandler/Devs/DOSDrivers/NCH" "$D/Devs/DOSDrivers/"
-sed -e "s/^@\$VER: NextcloudHandler.guide [0-9.]* ([0-9.]*)/@\$VER: NextcloudHandler.guide $ver ($amigadate)/" \
-	"$ROOT/package/NextcloudHandler/NextcloudHandler.guide" > "$D/NextcloudHandler.guide"
+cp "$bin" "$D/L/webdav-handler"
+cp "$prefs" "$D/Prefs/wdvprefs"
+cp "$ROOT/package/WebDAVHandler/Install" "$D/"
+cp "$ROOT/package/WebDAVHandler/Devs/DOSDrivers/WDV" "$D/Devs/DOSDrivers/"
+sed -e "s/^@\$VER: WebDAVHandler.guide [0-9.]* ([0-9.]*)/@\$VER: WebDAVHandler.guide $ver ($amigadate)/" \
+	"$ROOT/package/WebDAVHandler/WebDAVHandler.guide" > "$D/WebDAVHandler.guide"
 cp "$ROOT/UNLICENSE" "$D/LICENSE.txt"
 sed -e "s/@VERSION@/$ver/" -e "s/@DATE@/$isodate/" \
-	"$ROOT/package/NextcloudHandler.readme" > "$STAGE/NextcloudHandler.readme"
+	"$ROOT/package/WebDAVHandler.readme" > "$STAGE/WebDAVHandler.readme"
 
 {
-	echo "nextcloud-handler is public domain (LICENSE.txt). The handler binary"
+	echo "webdav-handler is public domain (LICENSE.txt). The handler binary"
 	echo "contains code from the following libraries, which are distributed under"
 	echo "their own licences, reproduced here."
 	echo
@@ -99,20 +101,21 @@ sed -e "s/@VERSION@/$ver/" -e "s/@DATE@/$isodate/" \
 
 # icons made by icon.library itself, see package/icons/README.md
 I="$ROOT/package/icons"
-cp "$I/NextcloudHandler.info" "$STAGE/"
-for f in Install NextcloudHandler.guide LICENSE.txt Third-party.txt L Prefs Devs; do
+cp "$I/WebDAVHandler.info" "$STAGE/"
+for f in Install WebDAVHandler.guide LICENSE.txt Third-party.txt L Prefs Devs; do
 	cp "$I/$f.info" "$D/$f.info"
 done
 cp "$I/Devs_DOSDrivers.info" "$D/Devs/DOSDrivers.info"
-cp "$I/Devs_DOSDrivers_NCH.info" "$D/Devs/DOSDrivers/NCH.info"
-cp "$I/Prefs_nchprefs.info" "$D/Prefs/nchprefs.info"
+cp "$I/Devs_DOSDrivers_WDV.info" "$D/Devs/DOSDrivers/WDV.info"
+cp "$I/Prefs_wdvprefs.info" "$D/Prefs/wdvprefs.info"
+cp "$I/def_WDV.info" "$D/Prefs/Env-Archive/Sys/def_WDV.info"
 
 rm -f "$OUT"
-(cd "$STAGE" && "$LHA" aq2o5 "$OUT" NextcloudHandler.info NextcloudHandler.readme NextcloudHandler)
+(cd "$STAGE" && "$LHA" aq2o5 "$OUT" WebDAVHandler.info WebDAVHandler.readme WebDAVHandler)
 "$LHA" l "$OUT" | tail -n +1
 echo "version $ver -> $OUT"
 if [ -d "$RELEASES" ]; then
-	cp -p "$OUT" "$STAGE/NextcloudHandler.readme" "$RELEASES/"
+	cp -p "$OUT" "$STAGE/WebDAVHandler.readme" "$RELEASES/"
 	echo "copied LHA and readme to $RELEASES"
 else
 	echo "note: $RELEASES not found, nothing copied" >&2

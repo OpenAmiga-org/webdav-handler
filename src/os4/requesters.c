@@ -1,4 +1,4 @@
-/* nextcloud-handler - requesters (ReAction). Public domain. */
+/* webdav-handler - requesters (ReAction). Public domain. */
 #include "os4.h"
 #include "util.h"
 

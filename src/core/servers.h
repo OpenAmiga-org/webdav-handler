@@ -1,21 +1,24 @@
-/* nextcloud-handler - the server list (shared by the handler and nchprefs).
+/* webdav-handler - the server list (shared by the handler and wdvprefs).
  *
- * ENV:NextcloudHandler/servers.xml (saved copy in ENVARC:):
+ * ENV:WebDAVHandler/servers.xml (saved copy in ENVARC:):
  *
  *   <?xml version="1.0" encoding="UTF-8"?>
- *   <nextcloudhandler version="1">
+ *   <webdavhandler version="1">
  *     <server name="Home" url="https://cloud.example.com" user="me"
  *             password="app-password" cafile="" insecure="0"/>
- *   </nextcloudhandler>
+ *   </webdavhandler>
  *
  * An empty password means: ask when connecting. All strings are UTF-8.
  * Public domain. */
-#ifndef NCH_SERVERS_H
-#define NCH_SERVERS_H
+#ifndef WDV_SERVERS_H
+#define WDV_SERVERS_H
 
 #include <stddef.h>
 
-#define CFG_DIR     "NextcloudHandler"
+#define CFG_DIR     "WebDAVHandler"
+/* where Nextcloud Handler 0.38 and 0.39 kept their list (taken over by
+ * wdvprefs), and 0.37 and older the .auth passwords */
+#define OLD_CFG_DIR "NextcloudHandler"
 #define CFG_SERVERS "servers.xml"
 
 /* Longest server name in bytes in the local character set: the FFS limit
@@ -24,12 +27,19 @@
 
 typedef struct {
 	char name[SERVER_NAME_MAX * 3 + 1];  /* UTF-8; a valid AmigaDOS name */
-	char url[512];                        /* Nextcloud address or WebDAV URL */
+	char url[512];                        /* server or WebDAV folder address */
 	char user[128];                       /* empty: no login */
 	char password[256];                   /* empty: asked for when needed */
 	char cafile[256];                     /* own certificate (PEM), Amiga path */
 	int  insecure;                        /* do not check the certificate */
+	int  type;                            /* SERVER_TYPE_* */
 } server_cfg;
+
+/* the same values as DAV_KIND_* (davclient.h) */
+enum { SERVER_TYPE_AUTO = 0, SERVER_TYPE_NEXTCLOUD = 1, SERVER_TYPE_WEBDAV = 2, SERVER_TYPE_COUNT };
+
+const char *server_type_name(int type);      /* "auto", "nextcloud", "webdav" */
+int         server_type_from_name(const char *s);   /* -1 when unknown */
 
 typedef struct {
 	server_cfg *server;

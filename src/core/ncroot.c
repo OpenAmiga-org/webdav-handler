@@ -1,4 +1,4 @@
-/* nextcloud-handler - the root of servers. Each server has its own WebDAV
+/* webdav-handler - the root of servers. Each server has its own WebDAV
  * session and file system (ncfs), made when its folder is first used.
  * Public domain. */
 #include "ncroot.h"
@@ -24,7 +24,7 @@
 typedef struct server {
 	struct server *next;      /* on the list of removed servers */
 	server_cfg     cfg;
-	char           display[SERVER_NAME_MAX * 3 + 140];  /* "Nextcloud:Home/" */
+	char           display[SERVER_NAME_MAX * 3 + 140];  /* "WebDAV:Home/" */
 	dav_session   *dav;
 	ncfs          *fs;
 	int            connected;
@@ -208,7 +208,7 @@ static void load_config(ncroot *r, int force)
 
 			r->cfg_reported = 1;
 			snprintf(msg, sizeof(msg), "The server list cannot be read:\n%s\n\n"
-			         "Use SYS:Prefs/nchprefs to make a new one.", err);
+			         "Use SYS:Prefs/wdvprefs to make a new one.", err);
 			report(r, NULL, msg);
 		}
 		servers_free(&l);
@@ -268,13 +268,13 @@ static const char *fail_hint(dav_session *dav)
 	case DAV_FAIL_TLS:
 		return "The server's certificate could not be checked. If the server\n"
 		       "uses a certificate of its own, give it as the certificate file\n"
-		       "in nchprefs; otherwise check that AmiSSL:Certs is up to date.";
+		       "in wdvprefs; otherwise check that AmiSSL:Certs is up to date.";
 	case DAV_FAIL_NETWORK:
-		return "Check the address in nchprefs and that the network is up.";
+		return "Check the address in wdvprefs and that the network is up.";
 	}
 	if (status == 401 || status == 403)
 		return "The server did not accept the user name or password.";
-	return "Check the address in nchprefs.";
+	return "Check the address in wdvprefs.";
 }
 
 /* Connects on first use. Returns 0 or -errno. */
@@ -293,7 +293,7 @@ static int need_server(ncroot *r, server *s)
 	if (s->cfg.url[0] == '\0') {
 		if (!s->reported) {
 			s->reported = 1;
-			report(r, s, "The server has no address. Set it in SYS:Prefs/nchprefs.");
+			report(r, s, "The server has no address. Set it in SYS:Prefs/wdvprefs.");
 		}
 		s->last_fail = plat_ms();
 		return ERR_OFFLINE;
@@ -310,6 +310,7 @@ static int need_server(ncroot *r, server *s)
 		dc.ca_file = s->cfg.cafile[0] != '\0' ? s->cfg.cafile : NULL;
 		dc.ca_path = s->cfg.cafile[0] != '\0' ? NULL : r->opt.ca_path;
 		dc.insecure = s->cfg.insecure;
+		dc.kind = s->cfg.type;   /* SERVER_TYPE_* = DAV_KIND_* */
 		dc.proxy = r->opt.proxy;
 		dc.connect_timeout = r->opt.connect_timeout;
 		dc.io_timeout = r->opt.io_timeout;
@@ -513,7 +514,7 @@ ncroot *ncroot_new(const ncroot_options *opt)
 		return NULL;
 	r->opt = *opt;
 	if (r->opt.display == NULL)
-		r->opt.display = "Nextcloud:";
+		r->opt.display = "WebDAV:";
 	r->started = plat_time();
 	snprintf(r->servers_file, sizeof(r->servers_file), "%s/%s", opt->config_dir, CFG_SERVERS);
 	load_config(r, 1);

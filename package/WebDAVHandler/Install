@@ -1,0 +1,243 @@
+; Install script for webdav-handler (AmigaOS 4 Installation Utility).
+; Public domain.
+
+(set #app "WebDAV Handler")
+(set @app-name "WebDAVHandler")
+(set @default-dest "L:")
+
+(set #bad 0)
+(set #missing "")
+
+(welcome
+  (cat "This installs " #app ": the device WDV: shows your WebDAV servers "
+       "(Nextcloud and others) as folders, and the prefs program wdvprefs "
+       "keeps the list of servers.\n\n"
+       "It replaces Nextcloud Handler, the earlier version, and takes its "
+       "servers over."))
+
+(if (= @user-level 0) (user 1))
+
+; --- requirements -------------------------------------------------------
+
+(procedure P_CHECK #lib #minver #minrev #what #where
+  (set #v (getversion #lib (resident)))
+  (if (= #v 0) (set #v (getversion (tackon "LIBS:" #lib))))
+  (if (< #v (+ (* #minver 65536) #minrev))
+    (
+      (set #bad 1)
+      (set #missing (cat #missing "\n\n" #what " (" #lib " " #minver "." #minrev
+                         " or newer) is missing or too old.\nGet it from: " #where))
+    )
+  )
+)
+
+(P_CHECK "filesysbox.library" 54 8 "filesysbox"
+         "AmigaOS 4.1 Final Edition updates")
+(P_CHECK "clib4.library" 2 5 "clib4"
+         "OS4Depot development/library/misc/clib4.lha\nor https://github.com/AmigaLabs/clib4/releases")
+(P_CHECK "amisslmaster.library" 5 0 "AmiSSL"
+         "OS4Depot library/misc/amissl.lha\nor https://github.com/jens-maus/amissl/releases")
+
+(if #bad
+  (if (= 0 (askbool
+        (prompt (cat "Some required libraries are missing:" #missing
+                     "\n\nThe handler cannot work without them. You can install "
+                     "it now and add the libraries later."))
+        (help @askbool-help)
+        (choices "Install anyway" "Stop")
+        (default 0)))
+    (exit (quiet))
+  )
+)
+
+; --- programs -------------------------------------------------------------
+
+; leftovers of an earlier install (see P_FREE), now no longer in use
+(run (cat "C:Delete >NIL: QUIET L:webdav-handler.old SYS:Prefs/wdvprefs.old "
+          "L:nextcloud-handler.old SYS:Prefs/nchprefs.old"))
+
+; A running handler keeps L:webdav-handler in use: it cannot be
+; replaced while WDV: is mounted. Stop it first; it is mounted again at
+; the end.
+(set #wasmounted (= 0 (run "C:Assign >NIL: WDV: EXISTS")))
+(if #wasmounted
+  (
+    (message "WDV: is mounted. To replace the handler, the installer "
+             "stops it now and mounts it again at the end.\n\n"
+             "Close any files you have open on WDV: first.")
+    (run "C:Dismount >NIL: WDV:")
+  )
+)
+
+; A file that is still in use (WDV: could not be stopped, or wdvprefs is
+; running) is moved aside, so that the new one can be copied in; the old
+; one goes with the next restart.
+(procedure P_FREE #file
+  (if (exists #file)
+    (if (<> 0 (run (cat "C:Delete >NIL: QUIET \"" #file "\"")))
+      (
+        (run (cat "C:Delete >NIL: QUIET \"" #file ".old\""))
+        (run (cat "C:Rename >NIL: \"" #file "\" \"" #file ".old\""))
+      )
+    )
+  )
+)
+; --- Nextcloud Handler, the earlier name -----------------------------------
+
+; WebDAV Handler replaces Nextcloud Handler (L:nextcloud-handler,
+; SYS:Prefs/nchprefs, the DOSDriver NCH). wdvprefs takes its servers over:
+; the list of 0.38 and 0.39 and the DOSDrivers of 0.37 and older.
+(if (or (exists "L:nextcloud-handler") (exists "SYS:Prefs/nchprefs"))
+  (if (askbool
+        (prompt "Nextcloud Handler, the earlier version of this handler, is "
+                "installed (L:nextcloud-handler, SYS:Prefs/nchprefs).\n\n"
+                "Remove it, with its DOSDriver NCH? wdvprefs takes its servers "
+                "over when it starts. DOSDrivers of version 0.37 and older "
+                "(NC0 and so on) stop working; wdvprefs offers to delete them.")
+        (help @askbool-help)
+        (default 1))
+    (
+      (if (= 0 (run "C:Assign >NIL: NCH: EXISTS"))
+        (run "C:Dismount >NIL: NCH:"))
+      (P_FREE "L:nextcloud-handler")
+      (P_FREE "SYS:Prefs/nchprefs")
+      (run (cat "C:Delete >NIL: QUIET SYS:Prefs/nchprefs.info "
+                "DEVS:DOSDrivers/NCH DEVS:DOSDrivers/NCH.info "
+                "SYS:Storage/DOSDrivers/NCH SYS:Storage/DOSDrivers/NCH.info"))
+    )
+  )
+)
+
+; --- the programs -----------------------------------------------------------
+
+(P_FREE "L:webdav-handler")
+(copyfiles
+  (prompt "Copying webdav-handler to L:")
+  (help @copyfiles-help)
+  (source "L/webdav-handler")
+  (dest "L:")
+  (confirm "expert"))
+
+(P_FREE "SYS:Prefs/wdvprefs")
+(copyfiles
+  (prompt "Copying the prefs program wdvprefs to SYS:Prefs")
+  (help @copyfiles-help)
+  (source "Prefs/wdvprefs")
+  (dest "SYS:Prefs")
+  (infos)
+  (confirm "expert"))
+
+; --- the DOSDriver ------------------------------------------------------
+
+(set #activate
+  (askbool
+    (prompt "Mount WDV: every time the computer starts?\n"
+            "(It connects to a server only when its folder is opened.)")
+    (help @askbool-help)
+    (default 1)))
+
+(set #dddest (if #activate "DEVS:DOSDrivers" "SYS:Storage/DOSDrivers"))
+(if (exists (tackon #dddest "WDV"))
+  (if (= 0 (askbool
+        (prompt (cat (tackon #dddest "WDV") " exists already. Replace it?"))
+        (help @askbool-help)
+        (default 1)))
+    (set #dddest "")
+  )
+)
+(if (<> #dddest "")
+  (copyfiles
+    (prompt (cat "Copying the DOSDriver to " #dddest))
+    (help @copyfiles-help)
+    (source "Devs/DOSDrivers/WDV")
+    (dest #dddest)
+    (infos)
+    (nogauge))
+)
+
+; --- volume icon ----------------------------------------------------------
+
+; Workbench shows the WDV: volume with ENV:Sys/def_WDV.info, the same way
+; as def_DF0 or def_RAD; the copy in ENVARC:Sys keeps it after a restart.
+; (or) evaluates all its arguments, so the question needs an (if) of its own
+(set #icon "Prefs/Env-Archive/Sys/def_WDV.info")
+(set #copyicon 1)
+(if (exists "ENVARC:Sys/def_WDV.info")
+  (set #copyicon
+    (askbool
+      (prompt "ENVARC:Sys/def_WDV.info (the icon of the WDV: volume) "
+              "exists already. Replace it?")
+      (help @askbool-help)
+      (default 1))))
+(if #copyicon
+  (
+    (if (not (exists "ENVARC:Sys")) (makedir "ENVARC:Sys"))
+    (if (not (exists "ENV:Sys")) (makedir "ENV:Sys"))
+    (copyfiles
+      (prompt "Copying the icon of the WDV: volume to ENVARC:Sys")
+      (help @copyfiles-help)
+      (source #icon)
+      (dest "ENVARC:Sys")
+      (nogauge))
+    (copyfiles
+      (prompt "Copying the icon of the WDV: volume to ENV:Sys")
+      (help @copyfiles-help)
+      (source #icon)
+      (dest "ENV:Sys")
+      (nogauge))
+  )
+)
+
+; --- documentation ------------------------------------------------------
+
+(set #docdir
+  (askdir
+    (prompt "Where should the documentation go?\n"
+            "A drawer named WebDAVHandler is created there.")
+    (help @askdir-help)
+    (default "SYS:Documentation")))
+
+(set #docs (tackon #docdir "WebDAVHandler"))
+(makedir #docs (prompt "Creating the documentation drawer") (help @makedir-help) (infos))
+(foreach "" "#?.(guide|txt)"
+  (copyfiles
+    (prompt "Copying the documentation")
+    (help @copyfiles-help)
+    (source @each-name)
+    (dest #docs)
+    (infos)
+    (nogauge)))
+
+; --- mount now ----------------------------------------------------------
+
+; the DOSDriver to mount: the one just copied, or the one that was there
+(set #ddfile "")
+(if (<> #dddest "")
+  (set #ddfile (tackon #dddest "WDV"))
+  (if (exists "DEVS:DOSDrivers/WDV")
+    (set #ddfile "DEVS:DOSDrivers/WDV")
+    (if (exists "SYS:Storage/DOSDrivers/WDV")
+      (set #ddfile "SYS:Storage/DOSDrivers/WDV"))))
+
+(if (= 0 (run "C:Assign >NIL: WDV: EXISTS"))
+  ; still mounted: Dismount did not work (files open on WDV:)
+  (message "WDV: could not be stopped, so the old handler keeps running. "
+           "The new one is used after the computer restarts.")
+  (if (and (<> #ddfile "") (or #wasmounted (<> #dddest "")))
+    (run (cat "C:Mount " #ddfile)))
+)
+
+; wdvprefs also takes the servers of Nextcloud Handler over (its list, and
+; the DOSDrivers of version 0.37 and older), and offers to delete them
+(if (askbool
+      (prompt "Start wdvprefs now to set up your servers?\n\n"
+              "If you used Nextcloud Handler, wdvprefs takes its servers "
+              "over.")
+      (help @askbool-help)
+      (default 1))
+  (run "Run >NIL: SYS:Prefs/wdvprefs")
+)
+
+(exit (cat #app " is installed.\n\nAdd your servers with SYS:Prefs/wdvprefs; "
+           "they appear as folders in WDV:.\nRead " (tackon #docs "WebDAVHandler.guide")
+           " for the details.") (quiet))

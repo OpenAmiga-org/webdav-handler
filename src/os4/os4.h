@@ -1,6 +1,6 @@
-/* nextcloud-handler - AmigaOS 4 parts. Public domain. */
-#ifndef NCH_OS4_H
-#define NCH_OS4_H
+/* webdav-handler - AmigaOS 4 parts. Public domain. */
+#ifndef WDV_OS4_H
+#define WDV_OS4_H
 
 #include <stddef.h>
 

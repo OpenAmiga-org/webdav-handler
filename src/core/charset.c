@@ -1,4 +1,4 @@
-/* nextcloud-handler - Amiga 8-bit character set <-> UTF-8. Public domain. */
+/* webdav-handler - Amiga 8-bit character set <-> UTF-8. Public domain. */
 #include "charset.h"
 #include "util.h"
 

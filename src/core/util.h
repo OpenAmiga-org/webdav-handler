@@ -1,6 +1,6 @@
-/* nextcloud-handler - helpers shared by all parts. Public domain. */
-#ifndef NCH_UTIL_H
-#define NCH_UTIL_H
+/* webdav-handler - helpers shared by all parts. Public domain. */
+#ifndef WDV_UTIL_H
+#define WDV_UTIL_H
 
 #include <stddef.h>
 #include <stdint.h>

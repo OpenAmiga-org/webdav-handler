@@ -1,4 +1,4 @@
-/* nextcloud-handler - WebDAV multistatus (PROPFIND) parser. Public domain. */
+/* webdav-handler - WebDAV multistatus (PROPFIND) parser. Public domain. */
 #include "davxml.h"
 #include "util.h"
 

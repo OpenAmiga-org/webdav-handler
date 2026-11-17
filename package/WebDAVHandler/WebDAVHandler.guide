@@ -1,25 +1,25 @@
-@database NextcloudHandler.guide
-@$VER: NextcloudHandler.guide 0.25 (15.11.2026)
+@database WebDAVHandler.guide
+@$VER: WebDAVHandler.guide 0.41 (17.11.2026)
 @author orgin
 @wordwrap
 @font topaz.font 8
 
-@node Main "Nextcloud Handler"
+@node Main "WebDAV Handler"
 
-                      @{b}Nextcloud Handler@{ub}
+                      @{b}WebDAV Handler@{ub}
 
-  Your Nextcloud and WebDAV files as a volume on AmigaOS 4
+   Your WebDAV and Nextcloud files as a volume on AmigaOS 4
 
   @{" Introduction           " link Intro}  What it is and what it does
   @{" Requirements           " link Requirements}  What you need first, and where to get it
   @{" Installation           " link Install}  With the Install script or by hand
-  @{" Servers (nchprefs)     " link Servers}  Adding your Nextcloud and WebDAV servers
+  @{" Servers (wdvprefs)     " link Servers}  Adding your servers
+  @{" Server types           " link Types}  Nextcloud and other WebDAV servers
   @{" App password           " link AppPassword}  Making a password for the Amiga in Nextcloud
   @{" Settings               " link Settings}  The Startup line of the DOSDriver
   @{" Password               " link Password}  How the handler gets your password
   @{" Using the volume       " link Using}  What works and how
-  @{" Upgrading from 0.37    " link Upgrade}  One device for all servers
-  @{" Other WebDAV servers   " link WebDAV}  ownCloud and plain WebDAV
+  @{" From Nextcloud Handler " link Upgrade}  Upgrading from the earlier version
   @{" Security               " link Security}  Certificates and stored passwords
   @{" Limits                 " link Limits}  Things to know
   @{" Troubleshooting        " link Trouble}  When something does not work
@@ -31,17 +31,19 @@
 @node Intro "Introduction"
 @{b}Introduction@{ub}
 
-nextcloud-handler is a filesystem handler for AmigaOS 4. It connects to
-Nextcloud servers over the internet (or your local network) and shows your
-files on an ordinary volume, @{b}Nextcloud:@{ub} (the device @{b}NCH:@{ub}).
+webdav-handler is a filesystem handler for AmigaOS 4. It connects to
+WebDAV servers over the internet (or your local network) and shows your
+files on an ordinary volume, @{b}WebDAV:@{ub} (the device @{b}WDV:@{ub}).
+WebDAV is offered by Nextcloud, ownCloud, many NAS boxes, hosting
+services and web servers such as Apache.
 
-Every server you set up with the prefs program @{b}nchprefs@{ub} is a
+Every server you set up with the prefs program @{b}wdvprefs@{ub} is a
 drawer in the volume:
 
-  Nextcloud:
+  WebDAV:
      Home/         your own Nextcloud
      Work/         the Nextcloud at work
-     Photos/       a plain WebDAV share
+     NAS/          the WebDAV share of a NAS
 
 Opening a drawer connects to that server; the volume itself does not
 connect anywhere, so it can be mounted at every start.
@@ -51,8 +53,11 @@ drawers, rename and delete files, use them from the Shell and open files
 from them in any program. Everything happens directly on the server: there
 is no local copy and nothing to synchronise.
 
-It also works with ownCloud and most other WebDAV servers, see
-@{"Other WebDAV servers" link WebDAV}.
+On a Nextcloud server the handler also keeps file dates and uploads big
+files in parts, see @{"Server types" link Types}.
+
+This handler was called Nextcloud Handler up to version 0.39, see
+@{"From Nextcloud Handler" link Upgrade}.
 
 @endnode
 
@@ -88,9 +93,9 @@ script checks the versions and tells you if something is missing.
 @{b}A working TCP/IP connection@{ub}
    Roadshow, as included in AmigaOS 4.1.
 
-@{b}A Nextcloud account@{ub}
-   The address of the server, your user name and an app password, see
-   @{"App password" link AppPassword}.
+@{b}A WebDAV server@{ub}
+   Its address, your user name and password. For Nextcloud use an app
+   password, see @{"App password" link AppPassword}.
 
 @endnode
 
@@ -99,63 +104,70 @@ script checks the versions and tells you if something is missing.
 
 @{b}With the Install script (recommended)@{ub}
 
-Double-click the @{b}Install@{ub} icon in the NextcloudHandler drawer. It
+Double-click the @{b}Install@{ub} icon in the WebDAVHandler drawer. It
 asks a few questions and then:
 
   - checks that the @{"required libraries" link Requirements} are installed,
-  - copies nextcloud-handler to L: and nchprefs to SYS:Prefs,
-  - copies the DOSDriver NCH to DEVS:DOSDrivers (mounted at every start)
+  - offers to remove Nextcloud Handler, the earlier version, if it is
+    installed (see @{"From Nextcloud Handler" link Upgrade}),
+  - copies webdav-handler to L: and wdvprefs to SYS:Prefs,
+  - copies the DOSDriver WDV to DEVS:DOSDrivers (mounted at every start)
     or SYS:Storage/DOSDrivers (mounted by hand),
+  - copies the icon of the volume to ENVARC:Sys/def_WDV.info (and ENV:),
   - copies this guide to a place you choose,
-  - mounts NCH: and starts nchprefs, so that you can add your servers
+  - mounts WDV: and starts wdvprefs, so that you can add your servers
     (see @{"Servers" link Servers}).
 
-If NCH: is mounted already, the script stops it, replaces the handler and
+If WDV: is mounted already, the script stops it, replaces the handler and
 mounts it again.
 
 @{b}By hand@{ub}
 
 1. Install clib4 and AmiSSL, see @{"Requirements" link Requirements}.
-2. Copy L/nextcloud-handler to L:
-3. Copy Prefs/nchprefs (and its icon) to SYS:Prefs
-4. Copy Devs/DOSDrivers/NCH (and its icon) to DEVS:DOSDrivers
-5. Double-click the NCH icon, or type in a Shell:
+2. Copy L/webdav-handler to L:
+3. Copy Prefs/wdvprefs (and its icon) to SYS:Prefs
+4. Copy Devs/DOSDrivers/WDV (and its icon) to DEVS:DOSDrivers
+5. Copy Prefs/Env-Archive/Sys/def_WDV.info to ENVARC:Sys and ENV:Sys
+   (the icon Workbench shows for the volume)
+6. Double-click the WDV icon, or type in a Shell:
 
-      Mount DEVS:DOSDrivers/NCH
+      Mount DEVS:DOSDrivers/WDV
 
-6. Start SYS:Prefs/nchprefs and add your servers.
+7. Start SYS:Prefs/wdvprefs and add your servers.
 
-In DEVS:DOSDrivers, NCH is mounted at every start. The handler connects to
+In DEVS:DOSDrivers, WDV is mounted at every start. The handler connects to
 a server only when its drawer is first used, so it does not matter if the
 network is not up yet when the system starts.
 
-If you used version 0.37 or older, see @{"Upgrading" link Upgrade}.
-
 @endnode
 
-@node Servers "Servers (nchprefs)"
-@{b}Servers (nchprefs)@{ub}
+@node Servers "Servers (wdvprefs)"
+@{b}Servers (wdvprefs)@{ub}
 
-The servers are set up with the prefs program @{b}SYS:Prefs/nchprefs@{ub}.
-Each server in its list is a drawer in NCH:.
+The servers are set up with the prefs program @{b}SYS:Prefs/wdvprefs@{ub}.
+Each server in its list is a drawer in WDV:.
 
   @{b}Add@{ub}, @{b}Duplicate@{ub}, @{b}Remove@{ub}
      Add a new server, copy the selected one, or remove it.
 
   @{b}Name@{ub}
-     The name of the drawer in NCH:, for example "Home". Any name that
+     The name of the drawer in WDV:, for example "Home". Any name that
      is a valid AmigaDOS file name (no ":" or "/").
 
   @{b}Address@{ub}
-     The server address you open in the browser, for example
-     https://cloud.example.com or https://example.com/nextcloud. See
-     @{"App password" link AppPassword}; for other servers
-     @{"Other WebDAV servers" link WebDAV}.
+     For Nextcloud the address you open in the browser, for example
+     https://cloud.example.com or https://example.com/nextcloud (see
+     @{"App password" link AppPassword}). For other servers the address of
+     the WebDAV folder, for example https://nas.example.com/webdav.
+
+  @{b}Type@{ub}
+     Automatic (the default), Nextcloud or WebDAV, see
+     @{"Server types" link Types}.
 
   @{b}User@{ub} and @{b}Password@{ub}
-     Your user name and an app password, see @{"App password" link AppPassword}.
-     Leave the password empty to be asked for it when the drawer is
-     opened, see @{"Password" link Password}.
+     Your user name and password (for Nextcloud an app password). Leave
+     the password empty to be asked for it when the drawer is opened, see
+     @{"Password" link Password}.
 
   @{b}Certificate@{ub}
      Only for a server with a certificate of its own: a PEM file with
@@ -167,41 +179,66 @@ Each server in its list is a drawer in NCH:.
 
   @{b}Test connection@{ub}
      Logs in with these settings and shows what it found (or why it
-     failed), without saving anything.
+     failed): where the files are, the server type, the number of files
+     and drawers and the free space. Nothing is saved.
 
-@{b}Save@{ub} keeps the list in ENVARC:NextcloudHandler/servers.xml (and
+@{b}Save@{ub} keeps the list in ENVARC:WebDAVHandler/servers.xml (and
 ENV:), @{b}Use@{ub} only in ENV: until the next restart. The Edit menu has
 "Reset to defaults" (an empty list), "Last saved" and "Restore".
 
-The handler sees a changed list at once: new servers appear in NCH:,
+The handler sees a changed list at once: new servers appear in WDV:,
 removed ones go, and a changed server is connected again the next time its
 drawer is used. Files that are open on a server keep working until they
 are closed.
 
 @endnode
 
-@node Upgrade "Upgrading from 0.37"
-@{b}Upgrading from version 0.37 or older@{ub}
+@node Types "Server types"
+@{b}Server types@{ub}
 
-Up to version 0.37, every server had a DOSDriver of its own (NC0, NC1,
-...), with the server on its Startup line. Since 0.39 there is one device,
-@{b}NCH:@{ub}, and the servers are set up with nchprefs.
+Any WebDAV server works. Nextcloud servers get two extras:
 
-The first time nchprefs starts (when there is no server list yet), it
-looks for those old DOSDrivers in DEVS:DOSDrivers and
-SYS:Storage/DOSDrivers and takes their servers over: the address, the user
-name, the password (from the Startup line or ENVARC:NextcloudHandler) and
-the CAFILE and INSECURE settings. The volume name becomes the name of the
-drawer. After Save or Use, nchprefs offers to delete the old DOSDrivers
-and their saved passwords.
+  - @{b}File dates@{ub}: SetDate and "Copy CLONE" keep the date of a file.
+    Other servers set the date of the upload; setting a date there is
+    accepted but has no effect (as with the protection bits).
+  - @{b}Big files in parts@{ub}: files over 16 MB (CHUNKSIZE) are uploaded
+    in parts, so server limits on the size of one request do not matter.
+    If the server does not allow it, the file goes up in one piece.
 
-An old DOSDriver that is still mounted with the new handler shows a
-requester that says so, and the device does not start.
+On Nextcloud the handler also finds the WebDAV folder of your files from
+the address you open in the browser.
+
+The @{b}Type@{ub} in wdvprefs says how the handler treats a server:
+
+  @{b}Automatic@{ub}  The handler asks the server at the address whether
+             it is a Nextcloud server (one request when the drawer is
+             first opened). If it is, it uses the extras and finds your
+             files folder; if not, the address is the WebDAV folder to
+             show. An address with /remote.php/ in it (the full WebDAV
+             address of Nextcloud or ownCloud) is taken as Nextcloud.
+  @{b}Nextcloud@{ub}  The server must be Nextcloud; the drawer reports an
+             error if it is not.
+  @{b}WebDAV@{ub}     The address is used as a plain WebDAV folder, without
+             the extras, also on a Nextcloud server.
+
+"Test connection" in wdvprefs shows the type found.
+
+@{b}Other servers@{ub}
+
+  - ownCloud: give the full WebDAV address, for example
+    https://owncloud.example.com/remote.php/webdav. File dates are kept;
+    uploads in parts are not used.
+  - Apache (mod_dav), NAS boxes and hosting services: give the address of
+    the WebDAV folder, with Type Automatic or WebDAV.
+
+File comments are stored as WebDAV properties; most servers keep them. The
+server must accept "Basic" login (https keeps the password safe on the
+way).
 
 @endnode
 
 @node AppPassword "App password"
-@{b}App password@{ub}
+@{b}App password (Nextcloud)@{ub}
 
 Nextcloud recommends a separate password for every device (an "app
 password"). It is needed if your account uses two-factor authentication,
@@ -229,11 +266,11 @@ can see it in the Nextcloud Files app under "Files settings".
 @node Settings "Settings"
 @{b}Settings@{ub}
 
-The servers are set up with nchprefs (see @{"Servers" link Servers}). The
+The servers are set up with wdvprefs (see @{"Servers" link Servers}). The
 @{b}Startup@{ub} line of the DOSDriver holds settings for the whole
 volume; none of them are needed:
 
-  Handler   = L:nextcloud-handler
+  Handler   = L:webdav-handler
   StackSize = 262144
   Priority  = 5
   GlobVec   = -1
@@ -242,7 +279,7 @@ volume; none of them are needed:
 
 Keywords:
 
-  @{b}VOLUME=name@{ub}        The name of the volume (default: Nextcloud).
+  @{b}VOLUME=name@{ub}        The name of the volume (default: WebDAV).
   @{b}READONLY@{ub}           Do not allow any changes on the servers.
   @{b}CACHETIME=s@{ub}        How many seconds the handler trusts what it
                      read from a server before it asks again
@@ -262,7 +299,7 @@ Keywords:
   @{b}PROXY=host:port@{ub}    Use an HTTP proxy.
   @{b}NOICONS@{ub}            Do not show drawer icons for the servers.
   @{b}CONFIGDIR=dir@{ub}      Read the server list from this drawer instead
-                     of ENV:NextcloudHandler.
+                     of ENV:WebDAVHandler.
   @{b}CHARSET=name@{ub}       Character set of file names on the Amiga:
                      ISO-8859-1 or ISO-8859-15 (default: the system's,
                      ENV:Charset).
@@ -283,7 +320,7 @@ The password of a server is taken from the server list (see
 the first time the server's drawer is used.
 
 In the requester, tick @{b}Remember the password@{ub} to save it in the
-server list (ENVARC:NextcloudHandler/servers.xml). It is saved only after
+server list (ENVARC:WebDAVHandler/servers.xml). It is saved only after
 the server has accepted it.
 
 If the server does not accept the password, the requester opens again. If
@@ -291,9 +328,9 @@ you click Cancel, the drawer shows "no disk" and the handler does not ask
 again, so that Workbench does not keep opening the requester. To try
 again, type in a Shell:
 
-  DiskChange NCH:
+  DiskChange WDV:
 
-To forget a saved password, clear it in nchprefs and save.
+To forget a saved password, clear it in wdvprefs and save.
 
 @endnode
 
@@ -304,14 +341,15 @@ To forget a saved password, clear it in nchprefs and save.
 
 The top of the volume shows one drawer for each server in the list, with
 a drawer icon. These drawers cannot be renamed, deleted or added to on
-the volume itself; that is done with nchprefs. Opening a drawer connects
+the volume itself; that is done with wdvprefs. Opening a drawer connects
 to its server.
 
 @{b}What works@{ub}
 
   - Reading and writing files of any size (also above 4 GB), copying,
     renaming, moving between drawers, deleting, creating drawers.
-  - File dates. "Copy CLONE" and SetDate keep the date on the server.
+  - File dates on Nextcloud: "Copy CLONE" and SetDate keep the date on
+    the server (see @{"Server types" link Types}).
   - File comments (FileNote) are stored on the server.
   - File names with national characters (a with ring, a and o with dots
     and so on) are converted between the Amiga character set and the
@@ -320,7 +358,8 @@ to its server.
   - Upper and lower case: like on any Amiga volume, "readme.txt" finds
     "ReadMe.TXT". Writing a file with a name that differs only in case
     replaces the existing file.
-  - Copying from one server to another.
+  - Copying from one server to another, also between Nextcloud and other
+    WebDAV servers.
 
 @{b}How writing works@{ub}
 
@@ -336,36 +375,46 @@ AmigaOS cannot report errors when a file is closed.
 @{b}Deleting drawers@{ub}
 
 As on any Amiga volume, only empty drawers can be deleted. (The server
-itself would delete a drawer with everything in it.) Deleted files go to
-the Nextcloud trash bin, where you can restore them in the web interface.
+itself would delete a drawer with everything in it.) On Nextcloud, deleted
+files go to the trash bin, where you can restore them in the web
+interface.
 
 @{b}Server not reachable@{ub}
 
 When a server cannot be reached, a requester says why (once), and its
 drawer reports "No disk in drive". The handler tries again at the next
 access (at most every 10 seconds); nothing needs to be remounted.
-"DiskChange NCH:" tries at once and shows the problem again.
+"DiskChange WDV:" tries at once and shows the problem again.
 
 @endnode
 
-@node WebDAV "Other WebDAV servers"
-@{b}Other WebDAV servers@{ub}
+@node Upgrade "From Nextcloud Handler"
+@{b}Upgrading from Nextcloud Handler@{ub}
 
-The handler first looks for a Nextcloud user folder at the address. If the
-server is not a Nextcloud server, it uses the address itself as the WebDAV
-folder to show. For ownCloud give the full WebDAV address, for example:
+This handler was called @{b}Nextcloud Handler@{ub} up to version 0.39
+(L:nextcloud-handler, SYS:Prefs/nchprefs, device NCH:; up to 0.37 one
+DOSDriver per server, NC0, NC1 and so on). WebDAV Handler replaces it.
 
-  https://owncloud.example.com/remote.php/webdav
+@{b}The Install script@{ub} offers to remove Nextcloud Handler: it stops
+NCH: and deletes L:nextcloud-handler, SYS:Prefs/nchprefs and the DOSDriver
+NCH. A file that is still in use is renamed to .old and deleted by the
+next installation.
 
-Reading, writing, drawers, renaming, deleting and the free space work on
-any WebDAV server. Some features need Nextcloud:
+@{b}wdvprefs@{ub}, the first time it starts (when there is no server list
+yet), takes the servers over:
 
-  - keeping the file date (SetDate, Copy CLONE): other servers set the
-    date of the upload,
-  - uploading big files in parts: other servers get one upload.
+  - the server list of Nextcloud Handler 0.38 and 0.39
+    (ENVARC:NextcloudHandler/servers.xml),
+  - the DOSDrivers of version 0.37 and older in DEVS:DOSDrivers and
+    SYS:Storage/DOSDrivers: the address, the user name, the password (from
+    the Startup line or ENVARC:NextcloudHandler), and the CAFILE and
+    INSECURE settings. The volume name becomes the name of the drawer.
 
-File comments are stored as WebDAV properties; most servers keep them.
-The server must accept "Basic" login.
+After Save or Use, wdvprefs offers to delete the old settings: the old
+DOSDrivers and ENV(ARC):NextcloudHandler.
+
+An old DOSDriver (with URL= on its Startup line) that is mounted with the
+new handler shows a requester that says so, and the device does not start.
 
 @endnode
 
@@ -379,20 +428,25 @@ that come with AmiSSL (AmiSSL:Certs). Certificates from Let's Encrypt and
 the other common authorities work without any setting.
 
 A server with a self-signed certificate or your own certificate authority
-fails the check. Do not switch the check off; instead give the server's
-certificate (or the CA certificate) as a PEM file in nchprefs
-(@{b}Certificate@{ub}), for example ENVARC:NextcloudHandler/home.pem.
+(common on a NAS) fails the check. Do not switch the check off; instead
+give the server's certificate (or the CA certificate) as a PEM file in
+wdvprefs (@{b}Certificate@{ub}), for example ENVARC:WebDAVHandler/nas.pem.
 
 "Do not check the server's certificate" switches the check off
 completely. Then anyone between you and the server could read your files
 and your password. Use it only for a quick test on your own network.
 
+@{b}Plain http@{ub}
+
+An http:// address sends the password and the files unencrypted. Use it
+only on your own network.
+
 @{b}Stored passwords@{ub}
 
 The passwords in the server list are stored as plain text in
-ENVARC:NextcloudHandler/servers.xml. Use app passwords (see
-@{"App password" link AppPassword}), so that you can withdraw them in
-Nextcloud at any time.
+ENVARC:WebDAVHandler/servers.xml. For Nextcloud use app passwords (see
+@{"App password" link AppPassword}), so that you can withdraw them at any
+time.
 
 @endnode
 
@@ -404,6 +458,8 @@ Nextcloud at any time.
     readable, writable, executable and deletable, so programs on the
     volume can be started. Scripts need "Execute", because the s bit is
     not kept.
+  - File dates are kept on Nextcloud only; on other servers setting a
+    date is accepted but has no effect.
   - Renaming that only changes upper and lower case ("hello" to "Hello")
     fails with "object already exists" with filesysbox.library 54.9.
     Rename it to another name first, then to the new one.
@@ -414,8 +470,8 @@ Nextcloud at any time.
   - A file or drawer cannot be moved from one server to another with
     Rename (the error is "packet request type unknown"): copy it, then
     delete the original.
-  - Info on NCH: shows 1 TB free: the volume holds several servers, each
-    with its own quota. nchprefs' Test connection shows a server's free
+  - Info on WDV: shows 1 TB free: the volume holds several servers, each
+    with its own quota. wdvprefs' Test connection shows a server's free
     space.
   - Changes made on the server by other devices show up after CACHETIME
     seconds (and within a minute in a drawer you are writing to).
@@ -424,6 +480,9 @@ Nextcloud at any time.
     TEMPDIR on an FFS partition, files over 2 GiB can only be written
     from start to end (as Copy does), because FFS cannot seek past 2 GiB.
   - Only one program can write to a file at a time.
+  - A file changed on the server during a read is noticed by its ETag.
+    Some servers (Apache) give a changed file a "weak" ETag for one
+    second; reading such a file within that second is not checked.
   - With filesysbox.library 54.9 (AmigaOS 4.1 FE Update 3) the handler
     converts file names itself, ISO-8859-1 or ISO-8859-15. Other character
     sets are not supported by this version.
@@ -439,23 +498,27 @@ Nextcloud at any time.
    filesysbox.library is missing or too old.
 
 @{b}The volume shows no servers@{ub}
-   The server list is empty or cannot be read: start nchprefs and add
+   The server list is empty or cannot be read: start wdvprefs and add
    your servers (see @{"Servers" link Servers}).
 
 @{b}"No disk in drive"@{ub}
    The server of that drawer could not be reached or the login failed.
    The requester shown the first time says why. Check the server's
-   settings with "Test connection" in nchprefs. While a server cannot be
+   settings with "Test connection" in wdvprefs. While a server cannot be
    reached, its drawer shows "no disk" and the handler tries again on the
    next access. A transfer that gets no data for TIMEOUT seconds (60 by
    default) also ends this way.
 
-   After changing the server in nchprefs, just open the drawer again;
-   "DiskChange NCH:" also tries again at once and shows problems again.
+   After changing the server in wdvprefs, just open the drawer again;
+   "DiskChange WDV:" also tries again at once and shows problems again.
+
+@{b}"No Nextcloud server at ..."@{ub}
+   The type of the server is Nextcloud, but the address does not lead to
+   one. Check the address, or set the type to Automatic or WebDAV.
 
 @{b}A requester about an old DOSDriver@{ub}
-   A DOSDriver of version 0.37 or older is still mounted, see
-   @{"Upgrading" link Upgrade}.
+   A DOSDriver of Nextcloud Handler 0.37 or older is mounted with the new
+   handler, see @{"From Nextcloud Handler" link Upgrade}.
 
 @{b}"Object is in use" while reading a file@{ub}
    The file was changed on the server while it was being read. The read
@@ -476,7 +539,7 @@ Nextcloud at any time.
 
       DumpDebugBuffer RAM:debug.txt
 
-   Look for the lines starting with [nextcloud-handler]. Please include
+   Look for the lines starting with [webdav-handler]. Please include
    them when you report a problem.
 
 @endnode
@@ -484,23 +547,42 @@ Nextcloud at any time.
 @node History "History"
 @{b}History@{ub}
 
-@{b}0.39 (17.11.2026)@{ub}
+@{b}0.41 (17.11.2026)@{ub}
+   - Nextcloud Handler is now WebDAV Handler: webdav-handler, the device
+     WDV:, the volume WebDAV: and the prefs program wdvprefs. Any WebDAV
+     server works; Nextcloud servers keep their extras.
+   - wdvprefs has a Type for every server: Automatic, Nextcloud or
+     WebDAV, see @{"Server types" link Types}. Test connection shows the
+     type found.
+   - The Install script removes Nextcloud Handler on request, and
+     wdvprefs takes its servers and passwords over, see
+     @{"From Nextcloud Handler" link Upgrade}.
+   - OS 4.1 style icons, and a volume icon for WDV: (def_WDV).
+   - Setting a file date on a server that cannot keep it is accepted
+     without effect, so that Copy CLONE works there.
+   - Reading a file whose ETag is weak (Apache, for one second after a
+     change) works; before, the read failed with "object is in use".
+   - With a clib4.library older than 2.5 the handler shows a requester
+     and the device does not start; before, the start (and with
+     Activate = 1 the boot) waited for ever.
+
+@{b}0.39 (17.11.2026)@{ub}   (Nextcloud Handler)
    - One device, NCH:, for all servers: every server is a drawer in the
      volume and is connected when its drawer is first used.
    - The new prefs program nchprefs keeps the list of servers, with a
      "Test connection" button. It takes the servers over from the
-     DOSDrivers of earlier versions, see @{"Upgrading" link Upgrade}.
+     DOSDrivers of earlier versions.
    - Remembered passwords go into the server list.
    - The character set of file names now comes from ENV:Charset when
      CHARSET is not given (it was always ISO-8859-1 before).
    - Long server messages are broken into lines in requesters.
 
-@{b}0.37 (15.11.2026)@{ub}
+@{b}0.37 (15.11.2026)@{ub}   (Nextcloud Handler)
    - Converting an empty text between the Amiga character set and UTF-8
      could give leftover memory instead of an empty text (no case is
      known where the handler showed it).
 
-@{b}0.32 (15.11.2026)@{ub}
+@{b}0.32 (15.11.2026)@{ub}   (Nextcloud Handler)
    - Reading stops with an error when the file is changed on the server
      during the read, instead of giving a mix of both versions.
    - The handler's code is freed when the volume is dismounted (about
@@ -513,7 +595,7 @@ Nextcloud at any time.
    - Files over 2 GiB can be written with TEMPDIR on an FFS partition
      (FFS cannot seek past 2 GiB; the temp file is now used in order).
 
-@{b}0.25 (15.11.2026)@{ub}
+@{b}0.25 (15.11.2026)@{ub}   (Nextcloud Handler)
    First test version.
 
 @endnode
@@ -521,7 +603,7 @@ Nextcloud at any time.
 @node Licence "Licence and credits"
 @{b}Licence and credits@{ub}
 
-nextcloud-handler is public domain (see LICENSE.txt). Source code:
+webdav-handler is public domain (see LICENSE.txt). Source code:
 https://github.com/orgin/nextcloud_client
 
 It is built with these libraries, which have their own licences (see
@@ -534,7 +616,7 @@ Third-party.txt):
   - AmiSSL link library, Apache licence 2.0
   - filesysbox.library, (c) Leif Salomonsson and Fredrik Wikstrom
 
-Nextcloud is a trademark of Nextcloud GmbH. This handler is not made or
-endorsed by Nextcloud GmbH.
+Nextcloud is a trademark of Nextcloud GmbH, ownCloud of ownCloud GmbH.
+This handler is not made or endorsed by them.
 
 @endnode

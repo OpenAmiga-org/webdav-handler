@@ -1,11 +1,12 @@
-# nextcloud-handler
+# webdav-handler
 #
-#   make linux      Linux FUSE test build  -> build/linux/nextcloud-fuse
-#   make os4        AmigaOS 4 handler       -> build/os4/nextcloud-handler
+#   make linux      Linux FUSE test build  -> build/linux/webdav-fuse
+#   make os4        AmigaOS 4 handler       -> build/os4/webdav-handler
 #                   (cross-compiled in the walkero/amigagccondocker image)
 #   make unit       unit tests (charset)
-#   make test       Linux build, unit tests, tests against the Docker test server
-#   make lha        release archive         -> dist/NextcloudHandler.lha
+#   make test       Linux build, unit tests, tests against the Docker test servers
+#                   (Nextcloud: testserver/setup.sh, plain WebDAV: testserver/webdav.sh)
+#   make lha        release archive         -> dist/WebDAVHandler.lha
 
 CORE_SRC  = src/core/util.c src/core/charset.c src/core/davxml.c src/core/davclient.c src/core/ncfs.c \
             src/core/servers.c src/core/ncroot.c
@@ -20,9 +21,9 @@ PKGS       = fuse3 libcurl expat
 
 all: linux
 
-linux: build/linux/nextcloud-fuse
+linux: build/linux/webdav-fuse
 
-build/linux/nextcloud-fuse: $(CORE_SRC) $(CORE_HDR) src/linux/main.c src/linux/platform_linux.c
+build/linux/webdav-fuse: $(CORE_SRC) $(CORE_HDR) src/linux/main.c src/linux/platform_linux.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(WARN) -Isrc/core $(shell pkg-config --cflags $(PKGS)) \
 		-o $@ $(CORE_SRC) src/linux/main.c src/linux/platform_linux.c \
@@ -40,6 +41,7 @@ os4:
 
 test: linux unit
 	python3 -I tests/run_tests.py
+	python3 -I tests/run_tests.py --webdav
 
 lha: os4
 	./tools/make_lha.sh

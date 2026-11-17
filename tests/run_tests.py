@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """Tests the core (through the Linux FUSE build) against the Docker test
-server. Every result is checked on the server directly over WebDAV, not
+servers. Every result is checked on the server directly over WebDAV, not
 only through the mount.
 
-    python3 -I tests/run_tests.py [--big] [--keep] [-k NAME]
+    python3 -I tests/run_tests.py [--webdav] [--big] [--keep] [-k NAME]
 
---big also writes and reads a file larger than 2 GiB.
+Without --webdav the file tests run on the Nextcloud test server
+(testserver/setup.sh), with the plain WebDAV server (testserver/webdav.sh)
+as a second kind of server where a test needs one. --webdav runs the file
+tests on the plain WebDAV server. --big also writes and reads a file larger
+than 2 GiB.
 """
 import base64
 import errno
 import hashlib
 import os
 import random
+import shutil
 import ssl
 import stat
 import subprocess
@@ -23,10 +28,10 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BIN = os.path.join(ROOT, "build", "linux", "nextcloud-fuse")
+BIN = os.path.join(ROOT, "build", "linux", "webdav-fuse")
 ENVFILE = os.path.join(ROOT, "testserver", "local", "env")
 CAFILE = os.path.join(ROOT, "testserver", "local", "ca.crt")
-WORK = os.environ.get("NCH_TESTDIR", "/tmp/nch-test")
+WORK = os.environ.get("WDV_TESTDIR", "/tmp/wdv-test")
 MNT = os.path.join(WORK, "mnt")
 KEEP = os.path.join(WORK, "kept")
 TMP = os.path.join(WORK, "tmp")
@@ -47,10 +52,24 @@ def load_env():
 
 
 ENV = load_env()
-USER = ENV["NC_USER"]
-BASE = ENV["NC_HTTPS"] + "/remote.php/dav/files/" + USER
-CTX = ssl.create_default_context(cafile=CAFILE)
-AUTH = "Basic " + base64.b64encode(f"{USER}:{ENV['NC_APP_PASS']}".encode()).decode()
+PLAIN = "--webdav" in sys.argv     # the file tests on plain WebDAV
+
+
+def basic(user, password):
+    return "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
+
+
+if PLAIN:
+    USER, PASS = ENV["WEBDAV_USER"], ENV["WEBDAV_PASS"]
+    SERVER_URL, SERVER_CA = ENV["WEBDAV_URL"], ""
+    BASE = ENV["WEBDAV_URL"]
+    CTX = None
+else:
+    USER, PASS = ENV["NC_USER"], ENV["NC_APP_PASS"]
+    SERVER_URL, SERVER_CA = ENV["NC_HTTPS"], CAFILE
+    BASE = ENV["NC_HTTPS"] + "/remote.php/dav/files/" + USER
+    CTX = ssl.create_default_context(cafile=CAFILE)
+AUTH = basic(USER, PASS)
 
 
 # --- direct WebDAV access (the reference) -----------------------------------
@@ -66,6 +85,24 @@ def dav(method, path, data=None, headers=None):
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
+
+
+def plain_dav(method, path, data=None):
+    """the plain WebDAV server, also in a Nextcloud run"""
+    if "WEBDAV_URL" not in ENV:
+        return None, b""
+    req = urllib.request.Request(ENV["WEBDAV_URL"] + urllib.parse.quote(path), data=data,
+                                 method=method)
+    req.add_header("Authorization", basic(ENV["WEBDAV_USER"], ENV["WEBDAV_PASS"]))
+    if method == "PROPFIND":
+        req.add_header("Depth", "0")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+    except urllib.error.URLError:
+        return None, b""
 
 
 def srv_get(path):
@@ -125,18 +162,18 @@ def occ(*args):
 
 # --- server list -----------------------------------------------------------------
 
-def server_xml(name, url, user="", password="", cafile="", insecure=0):
+def server_xml(name, url, user="", password="", cafile="", insecure=0, type="auto"):
     from xml.sax.saxutils import quoteattr
     return (f'  <server name={quoteattr(name)} url={quoteattr(url)} user={quoteattr(user)} '
             f'password={quoteattr(password)} cafile={quoteattr(cafile)} '
-            f'insecure="{insecure}"/>\n')
+            f'insecure="{insecure}" type="{type}"/>\n')
 
 
 def default_servers():
     return [
-        server_xml(SERVER, ENV["NC_HTTPS"], USER, ENV["NC_APP_PASS"], CAFILE),
+        server_xml(SERVER, SERVER_URL, USER, PASS, SERVER_CA),
         # the same account again, to test moves from one server to another
-        server_xml("Second", ENV["NC_HTTPS"], USER, ENV["NC_APP_PASS"], CAFILE),
+        server_xml("Second", SERVER_URL, USER, PASS, SERVER_CA),
         # nothing listens there: may only be tried when it is opened
         server_xml("Away", "https://127.0.0.1:9", "nobody", "x"),
     ]
@@ -146,9 +183,9 @@ def write_servers(entries):
     os.makedirs(CONF, exist_ok=True)
     path = os.path.join(CONF, "servers.xml")
     with open(path + ".tmp", "w") as f:
-        f.write('<?xml version="1.0" encoding="UTF-8"?>\n<nextcloudhandler version="1">\n')
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n<webdavhandler version="1">\n')
         f.writelines(entries)
-        f.write("</nextcloudhandler>\n")
+        f.write("</webdavhandler>\n")
     os.replace(path + ".tmp", path)
 
 
@@ -174,7 +211,7 @@ class Mount:
         self.proc = subprocess.Popen(
             [BIN, "--config", CONF, "--icon", ICON,
              "--cache-ms", str(CACHE_MS), "--tempdir", TMP, "--keepdir", KEEP,
-             "--debug" if os.environ.get("NCH_DEBUG") else "--verbose",
+             "--debug" if os.environ.get("WDV_DEBUG") else "--verbose",
              *self.extra, MNT, "-f"],
             env=env, stdin=subprocess.DEVNULL, stdout=self.logf, stderr=self.logf)
         for _ in range(100):
@@ -318,6 +355,9 @@ def t_changed_while_reading(d):
     # a mix of the old and the new version
     old = random.randbytes(3 * 1024 * 1024)
     assert dav("PUT", d + "/c.bin", old)[0] in (201, 204)
+    if PLAIN:
+        # Apache's ETag stays weak (no check possible) for a second
+        time.sleep(1.1)
     with open(m(d + "/c.bin"), "rb", buffering=0) as f:
         assert f.read(4096) == old[:4096]
         # Nextcloud's ETag comes from mtime (seconds), inode and size: a
@@ -465,6 +505,56 @@ def t_readonly(d):
         MNT = old
 
 
+def t_mtime_plain(d):
+    # plain WebDAV cannot set a date: accepted, without effect
+    with open(m(d + "/dated"), "wb") as f:
+        f.write(b"d")
+    when = 1262304000 + 3600
+    os.utime(m(d + "/dated"), (when, when))
+    assert srv_props(d + "/dated")["mtime"] != "Fri, 01 Jan 2010 01:00:00 GMT"
+
+
+def t_server_types(d):
+    """a plain WebDAV server next to Nextcloud, and the Type setting"""
+    if plain_dav("PROPFIND", "/")[0] != 207:
+        print("      (skipped: no plain WebDAV test server, see testserver/webdav.sh)")
+        return
+    when = 1262304000 + 3600
+    plain_dav("DELETE", "/mixed")
+    write_servers(default_servers() + [
+        # Nextcloud as plain WebDAV: the files, but not Nextcloud's extras
+        server_xml("PlainNC", ENV["NC_HTTPS"] + "/remote.php/dav/files/" + USER, USER, PASS,
+                   CAFILE, type="webdav"),
+        server_xml("Apache", ENV["WEBDAV_URL"], ENV["WEBDAV_USER"], ENV["WEBDAV_PASS"]),
+        # not a Nextcloud server: must be refused with the type Nextcloud
+        server_xml("ForcedNC", ENV["WEBDAV_URL"], ENV["WEBDAV_USER"], ENV["WEBDAV_PASS"],
+                   type="nextcloud")])
+    try:
+        time.sleep(1.2)
+        p = os.path.join(MNT, "PlainNC", d.lstrip("/"), "plain")
+        with open(p, "wb") as f:
+            f.write(b"p")
+        os.utime(p, (when, when))
+        assert srv_props(d + "/plain")["mtime"] != "Fri, 01 Jan 2010 01:00:00 GMT"
+        # the same file through the Nextcloud server keeps the date
+        os.utime(m(d + "/plain"), (when, when))
+        assert srv_props(d + "/plain")["mtime"] == "Fri, 01 Jan 2010 01:00:00 GMT"
+        # from Nextcloud to the plain WebDAV server and back
+        a = os.path.join(MNT, "Apache")
+        os.mkdir(os.path.join(a, "mixed"))
+        shutil.copyfile(m(d + "/plain"), os.path.join(a, "mixed", "copied"))
+        assert plain_dav("GET", "/mixed/copied") == (200, b"p")
+        shutil.copyfile(os.path.join(a, "mixed", "copied"), m(d + "/back"))
+        assert srv_get(d + "/back") == b"p"
+        log = log_text()
+        assert "Apache: connected" in log and "(WebDAV)" in log, "Apache must be plain WebDAV"
+        expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "ForcedNC"))
+        assert "No Nextcloud server at" in log_text()
+    finally:
+        plain_dav("DELETE", "/mixed")
+        write_servers(default_servers())
+
+
 def t_big_over_2gib(d):
     size = (1 << 31) + 4096 + 17
     blk = random.randbytes(1 << 20)
@@ -495,7 +585,7 @@ def t_root_lists_servers(d):
     # opening it connects, and fails
     expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "Away"))
     assert "Away: connecting" in log_text()
-    assert "*** Nextcloud: Away ***" in log_text(), "the problem must be shown once"
+    assert "*** WebDAV: Away ***" in log_text(), "the problem must be shown once"
     # within 10 s it is not tried again, and the problem is not shown again
     n = log_text().count("Away: connecting")
     expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "Away"))
@@ -527,13 +617,13 @@ def t_between_servers(d):
 
 def t_server_list_changes(d):
     try:
-        write_servers(default_servers() + [server_xml("Extra", ENV["NC_HTTPS"], USER,
-                                                      ENV["NC_APP_PASS"], CAFILE)])
+        write_servers(default_servers() + [server_xml("Extra", SERVER_URL, USER, PASS,
+                                                      SERVER_CA)])
         assert "Extra" in os.listdir(MNT)
         assert os.path.isdir(os.path.join(MNT, "Extra", d.lstrip("/")))
         # a broken file keeps the servers there are
         with open(os.path.join(CONF, "servers.xml"), "w") as f:
-            f.write("<nextcloudhandler><server name=")
+            f.write("<webdavhandler><server name=")
         time.sleep(1.2)
         assert "Extra" in os.listdir(MNT)
         assert "server list cannot be read" in log_text()
@@ -546,21 +636,21 @@ def t_server_list_changes(d):
 def t_password_questions(d):
     # no password in the list: asked for, and remembered when wanted
     write_servers(default_servers() + [
-        server_xml("Ask", ENV["NC_HTTPS"], USER, "", CAFILE),
-        server_xml("Wrong", ENV["NC_HTTPS"], USER, "not-the-password", CAFILE)])
+        server_xml("Ask", SERVER_URL, USER, "", SERVER_CA),
+        server_xml("Wrong", SERVER_URL, USER, "not-the-password", SERVER_CA)])
     try:
         time.sleep(1.2)
         ask = os.path.join(MNT, "Ask", d.lstrip("/"))
         wrong = os.path.join(MNT, "Wrong", d.lstrip("/"))
         assert os.listdir(ask) == []
         assert "password requester: Ask" in log_text()
-        assert read_servers()["Ask"]["password"] == ENV["NC_APP_PASS"], "remembered"
+        assert read_servers()["Ask"]["password"] == PASS, "remembered"
         # a wrong password in the list: asked again, with the reason
         assert os.listdir(wrong) == []
         assert "password requester: Wrong" in log_text()
         assert "did not accept the password" in log_text()
-        assert read_servers()["Wrong"]["password"] == ENV["NC_APP_PASS"]
-        assert read_servers()["Test"]["password"] == ENV["NC_APP_PASS"], "others kept"
+        assert read_servers()["Wrong"]["password"] == PASS
+        assert read_servers()["Test"]["password"] == PASS, "others kept"
     finally:
         write_servers(default_servers())
 
@@ -569,7 +659,7 @@ def t_password_cancelled(d):
     # a second mount whose password requester is cancelled
     global MNT
     old = MNT
-    write_servers(default_servers() + [server_xml("Cancel", ENV["NC_HTTPS"], USER, "", CAFILE)])
+    write_servers(default_servers() + [server_xml("Cancel", SERVER_URL, USER, "", SERVER_CA)])
     MNT = os.path.join(WORK, "mnt-cancel")
     try:
         with Mount():
@@ -587,7 +677,7 @@ def t_password_cancelled(d):
 
 
 TESTS = [t_root_lists_servers, t_root_read_only, t_between_servers, t_server_list_changes,
-         t_password_questions, t_password_cancelled,
+         t_password_questions, t_password_cancelled, t_server_types,
          t_small_file, t_names, t_case_insensitive, t_overwrite, t_update_in_place,
          t_empty_file, t_truncate, t_large_and_ranges, t_changed_while_reading, t_mkdir_rmdir,
          t_rmdir_sees_server_files, t_rename, t_unlink, t_mtime, t_comment,
@@ -597,6 +687,10 @@ TESTS = [t_root_lists_servers, t_root_read_only, t_between_servers, t_server_lis
 def main():
     args = sys.argv[1:]
     tests = list(TESTS)
+    if PLAIN:
+        # Nextcloud only: dates, quota (occ), the mixed test
+        tests = [t for t in tests if t not in (t_mtime, t_quota_failure, t_server_types)]
+        tests.append(t_mtime_plain)
     if "--big" in args:
         tests.append(t_big_over_2gib)
     if "-k" in args:
@@ -612,7 +706,7 @@ def main():
     st, _ = dav("MKCOL", "/T")
     assert st == 201, st
     failed = 0
-    with Mount(env={"NCH_ASK_PASSWORD": ENV["NC_APP_PASS"], "NCH_REMEMBER": "1"}):
+    with Mount(env={"WDV_ASK_PASSWORD": PASS, "WDV_REMEMBER": "1"}):
         for t in tests:
             d = "/T/" + t.__name__[2:]
             assert dav("MKCOL", d)[0] == 201

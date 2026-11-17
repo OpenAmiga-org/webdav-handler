@@ -1,0 +1,106 @@
+name: WebDAVHandler
+description: Filesystem handler for WebDAV and Nextcloud servers
+version: @VERSION@
+date: @DATE@
+author: orgin
+submitter: orgin
+email:
+url:
+category: driver/handler
+replaces:
+requirements: clib4.library 2.5, AmiSSL 5, filesysbox.library 54.8
+license: Public domain
+minosversion: 4.1
+texttype: Plain text
+distribute: yes
+hend:
+
+webdav-handler shows your WebDAV servers on one volume on AmigaOS 4,
+WebDAV: (device WDV:). Every server you add with the prefs program
+wdvprefs is a drawer in it, connected when the drawer is first opened.
+Files can be opened, copied, renamed, deleted and saved directly on the
+server, from Workbench, the Shell and any program. Nextcloud, ownCloud,
+NAS boxes, hosting services and web servers such as Apache work; on
+Nextcloud the handler also keeps file dates and uploads big files in
+parts.
+
+This is the new name of Nextcloud Handler (up to 0.39).
+
+Features:
+
+- Any number of servers in one device, set up with the prefs program
+  wdvprefs ("Test connection" button included). Each server's type is
+  found by itself (Nextcloud or plain WebDAV) or can be set.
+- Encrypted connections (https) through AmiSSL, with certificate check;
+  a server's own certificate can be given.
+- Files of any size; on Nextcloud big files are uploaded in parts, so
+  server limits on request size do not matter.
+- National characters in file names, converted between the Amiga
+  character set and UTF-8.
+- Upper and lower case are ignored, as on any Amiga volume.
+- Comments (FileNote) are kept on the server; on Nextcloud also file
+  dates (Copy CLONE, SetDate).
+- The password can be asked for with a requester and remembered.
+- The volume can be mounted at boot: a server is connected on first use,
+  and reconnected by itself after network problems.
+- A failed upload is reported with a requester, and the data is kept
+  locally, so nothing is lost.
+- OS 4.1 style icons, with a volume icon for WDV:.
+
+Requirements (install these first):
+
+- AmigaOS 4.1 Final Edition (tested with Update 3).
+- filesysbox.library 54.8 or newer (part of AmigaOS 4.1 FE).
+- clib4.library 2.5 or newer:
+  OS4Depot development/library/misc/clib4.lha
+  or https://github.com/AmigaLabs/clib4/releases
+- AmiSSL 5 or newer:
+  OS4Depot library/misc/amissl.lha
+  or https://github.com/jens-maus/amissl/releases
+- A TCP/IP stack (Roadshow, as included in AmigaOS 4.1).
+
+Installation:
+
+Double-click the Install icon. It checks the requirements, copies the
+handler to L: and wdvprefs to SYS:Prefs, installs the DOSDriver WDV and
+the volume icon, mounts WDV: and starts wdvprefs to add your servers.
+Everything else is described in WebDAVHandler.guide.
+
+Upgrading from Nextcloud Handler: the Install script offers to remove it,
+and wdvprefs takes its servers over (the server list of 0.38/0.39 and the
+DOSDrivers of 0.37 and older) and offers to delete the old settings.
+
+History:
+
+- 0.41 (2026-11-17): Nextcloud Handler is now WebDAV Handler
+  (webdav-handler, device WDV:, volume WebDAV:, prefs wdvprefs); any WebDAV
+  server works and Nextcloud servers keep their extras. A Type for every
+  server (Automatic, Nextcloud, WebDAV). Install removes Nextcloud Handler
+  on request and wdvprefs takes its servers over. OS 4.1 style icons and a
+  volume icon for WDV:. Setting a date on a server that cannot keep it is
+  accepted without effect. Reading files with a weak ETag works. With
+  clib4.library older than 2.5 the handler shows a requester instead of
+  stopping the boot.
+- 0.39 (2026-11-17, Nextcloud Handler): one device, NCH:, for all servers:
+  every server is a drawer, connected when it is first used. The new prefs
+  program nchprefs keeps the server list (with "Test connection") and takes
+  over the servers of the old DOSDrivers. Remembered passwords go into the
+  server list. The character set of file names comes from ENV:Charset when
+  CHARSET is not given. Long server messages are broken into lines in
+  requesters.
+- 0.37 (2026-11-15, Nextcloud Handler): converting an empty text between
+  the Amiga character set and UTF-8 could give leftover memory instead of
+  an empty text (no case is known where the handler showed it).
+- 0.32 (2026-11-15, Nextcloud Handler): reading stops with an error when
+  the file is changed on the server during the read, instead of giving a
+  mix of both versions. The handler's code is freed when the volume is
+  dismounted (about 3 MB were lost with every mount). Problems that need
+  the user, such as certificate errors, are shown in a requester once.
+  Names with ":" from the server can be used (shown as %u003A). Files show
+  the e bit, so programs on the volume can be started. Line breaks in
+  requesters are shown correctly. Files over 2 GiB can be written with
+  TEMPDIR on an FFS partition.
+- 0.25 (2026-11-15, Nextcloud Handler): first test version.
+
+webdav-handler is public domain. It uses libcurl, expat, zlib, clib4
+and AmiSSL, see Third-party.txt for their licences.

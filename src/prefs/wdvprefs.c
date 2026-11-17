@@ -1,5 +1,5 @@
-/* nchprefs - edits the server list of nextcloud-handler
- * (ENV:NextcloudHandler/servers.xml, saved in ENVARC:). Built with clib4:
+/* wdvprefs - edits the server list of webdav-handler
+ * (ENV:WebDAVHandler/servers.xml, saved in ENVARC:). Built with clib4:
  * the "Test connection" button uses the handler's own WebDAV code.
  * Public domain. */
 #include <proto/exec.h>
@@ -13,6 +13,7 @@
 #include <gadgets/button.h>
 #include <gadgets/string.h>
 #include <gadgets/checkbox.h>
+#include <gadgets/chooser.h>
 #include <gadgets/listbrowser.h>
 #include <images/label.h>
 #include <libraries/asl.h>
@@ -36,9 +37,9 @@
 #include "version.h"
 
 static const char __attribute__((used)) verstag[] =
-	"\0$VER: nchprefs " NCH_STR(NCH_VERSION) "." NCH_STR(NCH_REVISION) " (" NCH_DATE ")";
+	"\0$VER: wdvprefs " WDV_STR(WDV_VERSION) "." WDV_STR(WDV_REVISION) " (" WDV_DATE ")";
 
-#define PROGNAME   "nchprefs"
+#define PROGNAME   "wdvprefs"
 #define ENV_DIR    "ENV:" CFG_DIR
 #define ENVARC_DIR "ENVARC:" CFG_DIR
 #define MAX_OLD    16
@@ -50,12 +51,12 @@ extern struct LayoutIFace *ILayout;
 struct ListBrowserIFace *IListBrowser;
 struct AslIFace *IAsl;
 struct Library *AslBase;
-static struct ClassLibrary *WinLib, *LayLib, *BtnLib, *StrLib, *ChkLib, *LbLib, *LblLib;
-static Class *WinCls, *LayCls, *BtnCls, *StrCls, *ChkCls, *LbCls, *LblCls;
+static struct ClassLibrary *WinLib, *LayLib, *BtnLib, *StrLib, *ChkLib, *ChoLib, *LbLib, *LblLib;
+static Class *WinCls, *LayCls, *BtnCls, *StrCls, *ChkCls, *ChoCls, *LbCls, *LblCls;
 
 enum {
 	G_LIST = 1, G_ADD, G_DUP, G_REMOVE,
-	G_NAME, G_URL, G_USER, G_PASS, G_CAFILE, G_CAPICK, G_INSECURE,
+	G_NAME, G_URL, G_TYPE, G_USER, G_PASS, G_CAFILE, G_CAPICK, G_INSECURE,
 	G_TEST, G_SAVE, G_USE, G_CANCEL, G_COUNT
 };
 
@@ -72,6 +73,9 @@ static struct NewMenu menus[] = {
 	{ NM_ITEM,  (STRPTR)"Restore",       (STRPTR)"R", 0, 0, (APTR)M_RESTORE },
 	{ NM_END,   NULL,                    NULL, 0, 0, NULL }
 };
+
+/* in the order of SERVER_TYPE_* */
+static const char *type_labels[] = { "Automatic", "Nextcloud", "WebDAV", NULL };
 
 static struct ColumnInfo columns[] = {
 	{ 30, (STRPTR)"Name", 0 },
@@ -93,6 +97,7 @@ static struct {
 	char           old[MAX_OLD][300];   /* DOSDrivers of 0.37 or older taken over */
 	char           olddev[MAX_OLD][64];
 	int            nold;
+	int            old_list;  /* the list of Nextcloud Handler 0.38/0.39 taken over */
 } g;
 
 /* --- character sets --------------------------------------------------------- */
@@ -257,7 +262,7 @@ static void list_rebuild(void)
 /* --- the form ------------------------------------------------------------------ */
 
 static const int form_ids[] = {
-	G_NAME, G_URL, G_USER, G_PASS, G_CAFILE, G_CAPICK, G_INSECURE,
+	G_NAME, G_URL, G_TYPE, G_USER, G_PASS, G_CAFILE, G_CAPICK, G_INSECURE,
 	G_TEST, G_DUP, G_REMOVE, 0
 };
 
@@ -274,6 +279,7 @@ static void form_fill(void)
 	if (s == NULL) {
 		name[0] = url[0] = user[0] = pass[0] = cafile[0] = '\0';
 		set_attrs(G_INSECURE, GA_Selected, FALSE);
+		set_attrs(G_TYPE, CHOOSER_Selected, SERVER_TYPE_AUTO);
 	} else {
 		to_local(s->name, name, sizeof(name));
 		to_local(s->url, url, sizeof(url));
@@ -281,6 +287,7 @@ static void form_fill(void)
 		to_local(s->password, pass, sizeof(pass));
 		to_local(s->cafile, cafile, sizeof(cafile));
 		set_attrs(G_INSECURE, GA_Selected, s->insecure ? TRUE : FALSE);
+		set_attrs(G_TYPE, CHOOSER_Selected, (uint32)s->type);
 	}
 	set_text(G_NAME, name);
 	set_text(G_URL, url);
@@ -313,6 +320,9 @@ static int form_commit(void)
 	to_utf8(get_str(G_PASS), s->password, sizeof(s->password));
 	to_utf8(get_str(G_CAFILE), s->cafile, sizeof(s->cafile));
 	s->insecure = get_num(G_INSECURE, GA_Selected) != 0;
+	s->type = (int)get_num(G_TYPE, CHOOSER_Selected);
+	if (s->type < 0 || s->type >= SERVER_TYPE_COUNT)
+		s->type = SERVER_TYPE_AUTO;
 	if (problem != NULL) {
 		char msg[300], old[400];
 
@@ -441,9 +451,11 @@ static void replace_servers(const server_list *from)
 	select_server(g.servers.count > 0 ? 0 : -1);
 }
 
-/* --- DOSDrivers of version 0.37 and older ----------------------------------- */
+/* --- Nextcloud Handler, the earlier name ------------------------------------- */
 
-/* Until 0.37 every server had a DOSDriver of its own, with the server in
+/* Nextcloud Handler 0.38 and 0.39 kept the same server list in
+ * ENV(ARC):NextcloudHandler/servers.xml. Up to 0.37 every server had a
+ * DOSDriver of its own (Handler = L:nextcloud-handler), with the server in
  * its Startup line: "URL=https://... USER=name VOLUME=Nextcloud", the
  * password in PASSWORD= or in ENV(ARC):NextcloudHandler/<device>.auth. */
 
@@ -506,7 +518,7 @@ static void read_auth(const char *device, char *out, size_t outlen)
 	for (i = 0; i < 2 && out[0] == '\0'; i++) {
 		FILE *f;
 
-		snprintf(path, sizeof(path), "%s%s/%s.auth", dirs[i], CFG_DIR, device);
+		snprintf(path, sizeof(path), "%s%s/%s.auth", dirs[i], OLD_CFG_DIR, device);
 		f = fopen(path, "r");
 		if (f == NULL)
 			continue;
@@ -608,32 +620,96 @@ static void import_old(server_list *l)
 	}
 }
 
+/* the server list of Nextcloud Handler 0.38 or 0.39 */
+static int import_old_list(server_list *l)
+{
+	static const char *dirs[] = { "ENV:" OLD_CFG_DIR, "ENVARC:" OLD_CFG_DIR };
+	int i;
+
+	for (i = 0; i < 2; i++) {
+		char file[300];
+		server_list o;
+		int k;
+
+		snprintf(file, sizeof(file), "%s/%s", dirs[i], CFG_SERVERS);
+		servers_init(&o);
+		if (servers_load(file, &o, NULL, 0, NULL) == 0 && o.count > 0) {
+			for (k = 0; k < o.count; k++)
+				if (servers_find(l, o.server[k].name) < 0)
+					servers_add(l, &o.server[k]);
+			servers_free(&o);
+			g.old_list = 1;
+			return 1;
+		}
+		servers_free(&o);
+	}
+	return 0;
+}
+
 static void tell_imported(void)
 {
 	char msg[2000];
 	int i;
 
-	snprintf(msg, sizeof(msg), "These DOSDrivers were made for nextcloud-handler 0.37\n"
-	         "or older, with one server each:\n\n");
-	for (i = 0; i < g.nold; i++)
-		snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), "  %s\n", g.old[i]);
+	msg[0] = '\0';
+	if (g.old_list)
+		snprintf(msg, sizeof(msg), "The servers of Nextcloud Handler (ENVARC:%s)\n"
+		         "are in the list now.\n\n", OLD_CFG_DIR);
+	if (g.nold > 0) {
+		snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg),
+		         "These DOSDrivers were made for nextcloud-handler 0.37\n"
+		         "or older, with one server each:\n\n");
+		for (i = 0; i < g.nold; i++)
+			snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), "  %s\n", g.old[i]);
+		snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg),
+		         "\nTheir servers are in the list now.\n\n");
+	}
 	snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg),
-	         "\nTheir servers are in the list now; Save keeps them.\n"
-	         "nextcloud-handler now shows all servers in one device, NCH:.");
+	         "Save keeps them. webdav-handler shows all servers\n"
+	         "in one device, WDV:.");
 	tell(msg);
 }
 
-/* after Save or Use: the old DOSDrivers are no longer wanted */
+/* removes a drawer of settings with the files in it (not deeper); the
+ * names are collected first, so nothing is deleted while the drawer is
+ * being read */
+static void remove_settings_dir(const char *dir)
+{
+	APTR ctx = IDOS->ObtainDirContextTags(EX_StringNameInput, dir,
+	                                      EX_DataFields, EXF_NAME | EXF_TYPE, TAG_END);
+	struct ExamineData *dat;
+	char names[32][128];
+	int n = 0, i;
+
+	if (ctx != NULL) {
+		while ((dat = IDOS->ExamineDir(ctx)) != NULL && n < 32) {
+			if (EXD_IS_FILE(dat) && strlen(dat->Name) < sizeof(names[0]))
+				snprintf(names[n++], sizeof(names[0]), "%s", dat->Name);
+		}
+		IDOS->ReleaseDirContext(ctx);
+	}
+	for (i = 0; i < n; i++) {
+		char path[300];
+
+		snprintf(path, sizeof(path), "%.160s/%.127s", dir, names[i]);
+		remove(path);
+	}
+	remove(dir);
+}
+
+/* after Save or Use: the old settings are no longer wanted */
 static void offer_delete_old(void)
 {
 	char msg[2000];
 	int i;
 
-	if (g.nold == 0)
+	if (g.nold == 0 && !g.old_list)
 		return;
-	snprintf(msg, sizeof(msg), "The servers of these old DOSDrivers are now in NCH:\n\n");
+	snprintf(msg, sizeof(msg), "These old settings are now in the list of WDV:\n\n");
 	for (i = 0; i < g.nold; i++)
 		snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), "  %s\n", g.old[i]);
+	snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg),
+	         "  ENV(ARC):%s (server list, passwords)\n", OLD_CFG_DIR);
 	snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg),
 	         "\nDelete them? A device that is mounted now keeps\n"
 	         "working until the computer restarts.");
@@ -645,12 +721,12 @@ static void offer_delete_old(void)
 		remove(g.old[i]);
 		snprintf(path, sizeof(path), "%s.info", g.old[i]);
 		remove(path);
-		snprintf(path, sizeof(path), "%s/%s.auth", ENV_DIR, g.olddev[i]);
-		remove(path);
-		snprintf(path, sizeof(path), "%s/%s.auth", ENVARC_DIR, g.olddev[i]);
-		remove(path);
 	}
+	/* the .auth passwords of 0.37 and the list of 0.38/0.39 */
+	remove_settings_dir("ENV:" OLD_CFG_DIR);
+	remove_settings_dir("ENVARC:" OLD_CFG_DIR);
 	g.nold = 0;
+	g.old_list = 0;
 }
 
 /* --- test connection ---------------------------------------------------------- */
@@ -682,7 +758,8 @@ static const char *test_hint(dav_session *d)
 		       "With two-factor login, use an app password.";
 	if (status == 404)
 		return "No WebDAV folder at that address. For Nextcloud, enter the\n"
-		       "address you open in the browser.";
+		       "address you open in the browser; for other servers the\n"
+		       "address of the WebDAV folder with the type Automatic or WebDAV.";
 	return "";
 }
 
@@ -708,7 +785,7 @@ static void test_connection(void)
 	if (g.amissl == 0)
 		g.amissl = amissl_open() == 0 ? 1 : -1;
 	if (g.amissl < 0) {
-		tell("nextcloud-handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
+		tell("webdav-handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
 		     "AmiSSL: OS4Depot library/misc/amissl.lha");
 		return;
 	}
@@ -735,9 +812,10 @@ static void test_connection(void)
 	dc.ca_file = s.cafile[0] != '\0' ? s.cafile : NULL;
 	dc.ca_path = capath;
 	dc.insecure = s.insecure;
+	dc.kind = s.type;   /* SERVER_TYPE_* = DAV_KIND_* */
 	dc.connect_timeout = 15;
 	dc.io_timeout = 20;
-	dc.user_agent = "nchprefs " NCH_STR(NCH_VERSION) "." NCH_STR(NCH_REVISION) " (AmigaOS 4)";
+	dc.user_agent = "wdvprefs " WDV_STR(WDV_VERSION) "." WDV_STR(WDV_REVISION) " (AmigaOS 4)";
 	busy(1);
 	t0 = plat_ms();
 	d = dav_new(&dc);
@@ -771,12 +849,14 @@ static void test_connection(void)
 		         "The connection works.\n\n"
 		         "Address: %s\n"
 		         "Files at: %s\n"
-		         "Nextcloud: %s\n"
+		         "Server type: %s\n"
 		         "User: %s\n"
 		         "Contents: %d folder%s, %d file%s\n"
 		         "Free space: %s\n"
 		         "Time: %d.%d s",
-		         s.url, dav_root_url(d), dav_is_nextcloud(d) ? "yes" : "no (plain WebDAV)",
+		         s.url, dav_root_url(d),
+		         dav_is_nextcloud(d) ? "Nextcloud (file dates and big uploads in parts)" :
+		         s.type == SERVER_TYPE_WEBDAV ? "WebDAV (as chosen)" : "WebDAV (no Nextcloud found)",
 		         s.user[0] != '\0' ? s.user : "(none)", dirs, dirs == 1 ? "" : "s",
 		         files, files == 1 ? "" : "s", free_txt,
 		         (int)((plat_ms() - t0) / 1000), (int)((plat_ms() - t0) / 100 % 10));
@@ -838,8 +918,8 @@ static Object *label(const char *text)
 static int make_window(void)
 {
 	g.win = IIntuition->NewObject(WinCls, NULL,
-		WA_Title, "Nextcloud servers",
-		WA_ScreenTitle, PROGNAME " " NCH_STR(NCH_VERSION) "." NCH_STR(NCH_REVISION),
+		WA_Title, "WebDAV servers",
+		WA_ScreenTitle, PROGNAME " " WDV_STR(WDV_VERSION) "." WDV_STR(WDV_REVISION),
 		WA_Activate, TRUE,
 		WA_DragBar, TRUE,
 		WA_DepthGadget, TRUE,
@@ -856,7 +936,7 @@ static int make_window(void)
 			LAYOUT_AddChild, IIntuition->NewObject(LayCls, NULL,
 				LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
 				LAYOUT_BevelStyle, BVS_GROUP,
-				LAYOUT_Label, "Servers (folders in NCH:)",
+				LAYOUT_Label, "Servers (folders in WDV:)",
 				LAYOUT_AddChild, g.g[G_LIST] = IIntuition->NewObject(LbCls, NULL,
 					GA_ID, G_LIST,
 					GA_RelVerify, TRUE,
@@ -883,7 +963,19 @@ static int make_window(void)
 				LAYOUT_Label, "Server",
 				LAYOUT_AddChild, string(G_NAME, SERVER_NAME_MAX, 0),
 				CHILD_Label, label("_Name"),
-				LAYOUT_AddChild, string(G_URL, 511, 0),
+				LAYOUT_AddChild, IIntuition->NewObject(LayCls, NULL,
+					LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+					LAYOUT_AddChild, string(G_URL, 511, 0),
+					LAYOUT_AddChild, g.g[G_TYPE] = IIntuition->NewObject(ChoCls, NULL,
+						GA_ID, G_TYPE,
+						GA_RelVerify, TRUE,
+						CHOOSER_PopUp, TRUE,
+						CHOOSER_LabelArray, type_labels,
+						CHOOSER_Selected, 0,
+						TAG_END),
+					CHILD_Label, label("T_ype"),
+					CHILD_WeightedWidth, 0,
+					TAG_END),
 				CHILD_Label, label("Add_ress"),
 				LAYOUT_AddChild, IIntuition->NewObject(LayCls, NULL,
 					LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
@@ -959,10 +1051,10 @@ static void pick_cafile(void)
 
 static void about(void)
 {
-	tell(PROGNAME " " NCH_STR(NCH_VERSION) "." NCH_STR(NCH_REVISION) " (" NCH_DATE ")\n\n"
-	     "nchprefs keeps the list of Nextcloud and WebDAV servers\n"
-	     "that nextcloud-handler shows as folders in NCH:\n"
-	     "(in ENV:NextcloudHandler).\n\n"
+	tell(PROGNAME " " WDV_STR(WDV_VERSION) "." WDV_STR(WDV_REVISION) " (" WDV_DATE ")\n\n"
+	     "wdvprefs keeps the list of WebDAV servers (Nextcloud\n"
+	     "and others) that webdav-handler shows as folders in\n"
+	     "WDV: (in ENV:WebDAVHandler).\n\n"
 	     "Public domain. Uses libcurl, expat, zlib and AmiSSL.");
 }
 
@@ -1049,7 +1141,7 @@ static void event_loop(void)
 					}
 					break;
 				case G_NAME: case G_URL: case G_USER: case G_PASS:
-				case G_CAFILE: case G_INSECURE:
+				case G_CAFILE: case G_INSECURE: case G_TYPE:
 					form_commit();
 					break;
 				case G_CAPICK:
@@ -1090,6 +1182,7 @@ static int open_libs(void)
 	BtnLib = IIntuition->OpenClass("gadgets/button.gadget", 53, &BtnCls);
 	StrLib = IIntuition->OpenClass("gadgets/string.gadget", 53, &StrCls);
 	ChkLib = IIntuition->OpenClass("gadgets/checkbox.gadget", 53, &ChkCls);
+	ChoLib = IIntuition->OpenClass("gadgets/chooser.gadget", 53, &ChoCls);
 	LbLib  = IIntuition->OpenClass("gadgets/listbrowser.gadget", 53, &LbCls);
 	LblLib = IIntuition->OpenClass("images/label.image", 53, &LblCls);
 	if (LbLib != NULL)
@@ -1099,7 +1192,8 @@ static int open_libs(void)
 	if (AslBase != NULL)
 		IAsl = (struct AslIFace *)IExec->GetInterface(AslBase, "main", 1, NULL);
 	return WinCls != NULL && LayCls != NULL && BtnCls != NULL && StrCls != NULL &&
-	       ChkCls != NULL && LbCls != NULL && LblCls != NULL && IListBrowser != NULL;
+	       ChkCls != NULL && ChoCls != NULL && LbCls != NULL && LblCls != NULL &&
+	       IListBrowser != NULL;
 }
 
 static void close_libs(void)
@@ -1113,6 +1207,7 @@ static void close_libs(void)
 	if (IIntuition != NULL) {
 		IIntuition->CloseClass(LblLib);
 		IIntuition->CloseClass(LbLib);
+		IIntuition->CloseClass(ChoLib);
 		IIntuition->CloseClass(ChkLib);
 		IIntuition->CloseClass(StrLib);
 		IIntuition->CloseClass(BtnLib);
@@ -1140,16 +1235,18 @@ int main(void)
 	}
 	have_list = load_from(ENV_DIR, &g.servers, 1) != -ENOENT ||
 	            load_from(ENVARC_DIR, &g.servers, 1) != -ENOENT;
-	/* first start after 0.37 or older: take the servers over from the
-	 * old DOSDrivers */
-	if (!have_list)
+	/* first start after Nextcloud Handler: take its servers over (the
+	 * list of 0.38/0.39, the DOSDrivers of 0.37 and older) */
+	if (!have_list) {
+		import_old_list(&g.servers);
 		import_old(&g.servers);
-	if (g.nold == 0)
+	}
+	if (g.nold == 0 && !g.old_list)
 		for (i = 0; i < g.servers.count; i++)
 			servers_add(&g.start, &g.servers.server[i]);
 	if (make_window()) {
 		select_server(g.servers.count > 0 ? 0 : -1);
-		if (g.nold > 0) {
+		if (g.nold > 0 || g.old_list) {
 			tell_imported();
 		} else {
 			/* complaints about the file only now that there is a window */

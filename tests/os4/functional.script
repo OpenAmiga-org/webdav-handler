@@ -1,5 +1,5 @@
-; nextcloud-handler functional test, run in the OS4 guest with NC1: mounted
-; (since 0.38: "Assign NC1: NCH:Test", a server of the test server list)
+; webdav-handler functional test, run in the OS4 guest with NC1: mounted
+; (since 0.38: "Assign NC1: WDV:Test", a server of the test server list)
 FailAt 21
 Echo "== download"
 Copy NC1:big5.bin RAM:nch/big5.bin CLONE

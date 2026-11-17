@@ -1,4 +1,4 @@
-/* nextcloud-handler - requests from the filesysbox callbacks to the worker.
+/* webdav-handler - requests from the filesysbox callbacks to the worker.
  *
  * filesysbox.library runs the filesystem callbacks in its own process and,
  * on AmigaOS 4, also directly in the tasks of the programs that use the
@@ -9,8 +9,8 @@
  *
  * Code on the callback side must use Exec only: no C library calls.
  * Public domain. */
-#ifndef NCH_RPC_H
-#define NCH_RPC_H
+#ifndef WDV_RPC_H
+#define WDV_RPC_H
 
 #include <exec/ports.h>
 #include <stdint.h>

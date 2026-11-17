@@ -1,10 +1,10 @@
-/* nextcloud-handler - Linux FUSE front end of the core, used to test the
+/* webdav-handler - Linux FUSE front end of the core, used to test the
  * core quickly against a real server. It is not part of the AmigaOS
  * release. Public domain.
  *
- *   nextcloud-fuse --config DIR [options] MOUNTPOINT [fuse options]
+ *   webdav-fuse --config DIR [options] MOUNTPOINT [fuse options]
  *
- * DIR holds servers.xml (the server list, as made by nchprefs). The root
+ * DIR holds servers.xml (the server list, as made by wdvprefs). The root
  * of the mount lists the servers; see src/core/ncroot.h.
  */
 #define FUSE_USE_VERSION 31
@@ -278,7 +278,7 @@ static const struct fuse_operations ops = {
 static void usage(void)
 {
 	fprintf(stderr,
-	        "usage: nextcloud-fuse --config DIR [--save-dir DIR] [--icon FILE]\n"
+	        "usage: webdav-fuse --config DIR [--save-dir DIR] [--icon FILE]\n"
 	        "         [--capath DIR] [--cache-ms N] [--tempdir DIR] [--keepdir DIR]\n"
 	        "         [--readonly] [--verbose] [--debug] MOUNTPOINT [fuse options]\n"
 	        "DIR holds servers.xml, the server list.\n");
@@ -291,10 +291,10 @@ int main(int argc, char **argv)
 	int fargc = 0, i, rc;
 
 	memset(&ro, 0, sizeof(ro));
-	ro.user_agent = "nextcloud-handler-test (Linux)";
+	ro.user_agent = "webdav-handler-test (Linux)";
 	ro.tempdir = "/tmp";
 	ro.keepdir = "/tmp/nch-kept";
-	ro.display = "Nextcloud:";
+	ro.display = "WebDAV:";
 
 	fargv[fargc++] = argv[0];
 	fargv[fargc++] = "-s"; /* the core is single-threaded, like filesysbox */

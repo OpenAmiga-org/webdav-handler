@@ -29,29 +29,29 @@ OS4_SRC  = src/os4/main.c src/os4/platform_os4.c src/os4/requesters.c src/os4/am
 GLUE_SRC = src/os4/fbxglue.c
 GLUE_FLAGS = -fno-builtin -fno-tree-loop-distribute-patterns
 
-# nchprefs tests connections with the handler's own WebDAV code
-PREFS_SRC = src/prefs/nchprefs.c src/core/util.c src/core/charset.c src/core/davxml.c \
+# wdvprefs tests connections with the handler's own WebDAV code
+PREFS_SRC = src/prefs/wdvprefs.c src/core/util.c src/core/charset.c src/core/davxml.c \
             src/core/davclient.c src/core/servers.c \
             src/os4/platform_os4.c src/os4/requesters.c src/os4/amissl.c
 
 .PHONY: handler prefs curltest curlspeed
 
-handler: build/os4/nextcloud-handler
+handler: build/os4/webdav-handler
 
 build/os4/fbxglue.o: $(GLUE_SRC) $(wildcard src/core/*.h src/os4/*.h)
 	$(CC) $(CFLAGS) $(GLUE_FLAGS) -c -o $@ $(GLUE_SRC)
 
-build/os4/nextcloud-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(wildcard src/core/*.h src/os4/*.h)
+build/os4/webdav-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(wildcard src/core/*.h src/os4/*.h)
 	$(CC) $(CFLAGS) -o $@.link $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(LDFLAGS) $(LIBS)
-	# AmigaOS starts a program at the symbol _start. Make that our nch_entry,
+	# AmigaOS starts a program at the symbol _start. Make that our wdv_entry,
 	# which runs before clib4's startup code (see src/os4/main.c).
-	$(OBJCOPY) --redefine-sym _start=clib4_crt_start --redefine-sym nch_entry=_start $@.link $@.debug
+	$(OBJCOPY) --redefine-sym _start=clib4_crt_start --redefine-sym wdv_entry=_start $@.link $@.debug
 	rm -f $@.link
 	$(STRIP) $(STRIPFLAGS) -o $@ $@.debug
 
-prefs: build/os4/nchprefs
+prefs: build/os4/wdvprefs
 
-build/os4/nchprefs: $(PREFS_SRC) $(wildcard src/core/*.h src/os4/*.h)
+build/os4/wdvprefs: $(PREFS_SRC) $(wildcard src/core/*.h src/os4/*.h)
 	$(CC) $(CFLAGS) -o $@.debug $(PREFS_SRC) $(LDFLAGS) $(LIBS)
 	$(STRIP) $(STRIPFLAGS) -o $@ $@.debug
 

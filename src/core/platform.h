@@ -1,8 +1,8 @@
-/* nextcloud-handler - what the core needs from the operating system.
+/* webdav-handler - what the core needs from the operating system.
  * Implemented in src/os4/platform_os4.c and src/linux/platform_linux.c.
  * Public domain. */
-#ifndef NCH_PLATFORM_H
-#define NCH_PLATFORM_H
+#ifndef WDV_PLATFORM_H
+#define WDV_PLATFORM_H
 
 #include <stddef.h>
 #include <stdint.h>

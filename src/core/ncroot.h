@@ -1,11 +1,11 @@
-/* nextcloud-handler - the volume the handler shows: the root lists the
+/* webdav-handler - the volume the handler shows: the root lists the
  * servers of the server list (servers.h), each server is a folder that
  * shows the files of that account. A server is connected when its folder
  * is first used. The OS4 (filesysbox) and Linux (FUSE) front ends call
  * these. Paths are UTF-8, "/" is the root. Errors are -errno.
  * Public domain. */
-#ifndef NCH_NCROOT_H
-#define NCH_NCROOT_H
+#ifndef WDV_NCROOT_H
+#define WDV_NCROOT_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,13 +14,13 @@
 #include "ncfs.h"
 
 typedef struct {
-	const char *config_dir;   /* servers.xml: "ENV:NextcloudHandler" */
+	const char *config_dir;   /* servers.xml: "ENV:WebDAVHandler" */
 	const char *save_dir;     /* remembered passwords also go here
-	                             ("ENVARC:NextcloudHandler"), may be NULL */
+	                             ("ENVARC:WebDAVHandler"), may be NULL */
 	const char *icon_file;    /* drawer icon shown for each server, NULL = none */
 	const char *tempdir;      /* upload buffers */
 	const char *keepdir;      /* failed uploads are saved here */
-	const char *display;      /* shown before paths in messages: "Nextcloud:" */
+	const char *display;      /* shown before paths in messages: "WebDAV:" */
 	const char *ca_path;      /* trusted certificates, may be NULL */
 	const char *proxy;        /* "host:port", may be NULL */
 	const char *user_agent;

@@ -1,6 +1,6 @@
-/* nextcloud-handler - WebDAV client on top of libcurl. Public domain. */
-#ifndef NCH_DAVCLIENT_H
-#define NCH_DAVCLIENT_H
+/* webdav-handler - WebDAV client on top of libcurl. Public domain. */
+#ifndef WDV_DAVCLIENT_H
+#define WDV_DAVCLIENT_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -8,8 +8,12 @@
 
 #include "platform.h"
 
+/* What kind of server: found out when connecting, or given */
+enum { DAV_KIND_AUTO = 0, DAV_KIND_NEXTCLOUD = 1, DAV_KIND_WEBDAV = 2 };
+
 typedef struct {
 	const char *url;             /* server address or full WebDAV URL */
+	int         kind;            /* DAV_KIND_*: AUTO finds Nextcloud by itself */
 	const char *user;
 	const char *password;
 	const char *ca_file;         /* PEM bundle, may be NULL */
@@ -46,7 +50,8 @@ typedef struct {
 
 dav_session *dav_new(const dav_config *cfg);
 /* Finds the WebDAV root (Nextcloud user folder or the URL itself) and
- * checks the login. Returns 0 or -errno; see dav_error(). */
+ * checks the login. Nextcloud's extras (file dates, chunked upload) are
+ * used only on a Nextcloud server. Returns 0 or -errno; see dav_error(). */
 int  dav_connect(dav_session *s);
 void dav_free(dav_session *s);
 

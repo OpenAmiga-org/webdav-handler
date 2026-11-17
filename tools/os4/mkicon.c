@@ -1,8 +1,9 @@
 /* mkicon - lets icon.library save an icon from a raw 64x64 ARGB picture.
  * Used once to create the release icons in package/icons (see
- * tools/make_icons.sh); not part of the release. Public domain.
+ * tools/make_icons.py); not part of the release. TYPE=DISK makes a volume
+ * icon such as ENV:Sys/def_WDV.info. Public domain.
  *
- *   mkicon NAME ARGB=file [SELECTED=file] TYPE=PROJECT|DRAWER|TOOL
+ *   mkicon NAME ARGB=file [SELECTED=file] TYPE=PROJECT|DRAWER|TOOL|DISK
  *          [TOOL=default tool] [STACK=n] [WINDOW=x,y,w,h] [TT=tooltype ...]
  */
 #include <proto/exec.h>
@@ -58,11 +59,12 @@ int main(int argc, char **argv)
 	}
 	tts[ntt] = NULL;
 	if (name == NULL || argb == NULL) {
-		printf("usage: mkicon NAME ARGB=file [SELECTED=file] TYPE=PROJECT|DRAWER|TOOL "
+		printf("usage: mkicon NAME ARGB=file [SELECTED=file] TYPE=PROJECT|DRAWER|TOOL|DISK "
 		       "[TOOL=x] [STACK=n] [WINDOW=x,y,w,h] [TT=x ...]\n");
 		return 5;
 	}
-	t = strcmp(type, "DRAWER") == 0 ? WBDRAWER : strcmp(type, "TOOL") == 0 ? WBTOOL : WBPROJECT;
+	t = strcmp(type, "DRAWER") == 0 ? WBDRAWER : strcmp(type, "TOOL") == 0 ? WBTOOL :
+	    strcmp(type, "DISK") == 0 ? WBDISK : WBPROJECT;
 
 	IconBase = IExec->OpenLibrary("icon.library", 51);
 	if (IconBase == NULL)
@@ -100,7 +102,7 @@ int main(int argc, char **argv)
 		dobj->do_StackSize = stack;
 	dobj->do_CurrentX = NO_ICON_POSITION;
 	dobj->do_CurrentY = NO_ICON_POSITION;
-	if (t == WBDRAWER && dobj->do_DrawerData != NULL && wx >= 0) {
+	if ((t == WBDRAWER || t == WBDISK) && dobj->do_DrawerData != NULL && wx >= 0) {
 		dobj->do_DrawerData->dd_NewWindow.LeftEdge = wx;
 		dobj->do_DrawerData->dd_NewWindow.TopEdge = wy;
 		dobj->do_DrawerData->dd_NewWindow.Width = ww;

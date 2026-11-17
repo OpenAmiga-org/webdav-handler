@@ -1,4 +1,4 @@
-/* nextcloud-handler - helpers shared by all parts. Public domain. */
+/* webdav-handler - helpers shared by all parts. Public domain. */
 #include "util.h"
 
 #include <ctype.h>

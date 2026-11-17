@@ -1,4 +1,4 @@
-/* nextcloud-handler - the server list (XML). Public domain. */
+/* webdav-handler - the server list (XML). Public domain. */
 #include "servers.h"
 #include "util.h"
 
@@ -8,6 +8,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+
+/* --- server types --------------------------------------------------------- */
+
+static const char *const type_names[SERVER_TYPE_COUNT] = { "auto", "nextcloud", "webdav" };
+
+const char *server_type_name(int type)
+{
+	return type >= 0 && type < SERVER_TYPE_COUNT ? type_names[type] : "auto";
+}
+
+int server_type_from_name(const char *s)
+{
+	int i;
+
+	for (i = 0; i < SERVER_TYPE_COUNT; i++)
+		if (strcasecmp(s, type_names[i]) == 0)
+			return i;
+	return -1;
+}
 
 /* --- server list ---------------------------------------------------------- */
 
@@ -68,7 +87,7 @@ int server_cfg_same_account(const server_cfg *a, const server_cfg *b)
 {
 	return name_casecmp(a->name, b->name) == 0 && strcmp(a->url, b->url) == 0 &&
 	       strcmp(a->user, b->user) == 0 && strcmp(a->cafile, b->cafile) == 0 &&
-	       a->insecure == b->insecure;
+	       a->insecure == b->insecure && a->type == b->type;
 }
 
 int server_cfg_equal(const server_cfg *a, const server_cfg *b)
@@ -170,6 +189,8 @@ static void server_element(struct parse *ps, const XML_Char **attr)
 			copy_attr(s.cafile, sizeof(s.cafile), v, &bad);
 		else if (strcmp(k, "insecure") == 0)
 			s.insecure = atoi(v) != 0;
+		else if (strcmp(k, "type") == 0 && (s.type = server_type_from_name(v)) < 0)
+			s.type = SERVER_TYPE_AUTO;   /* a type of a later version */
 	}
 	if (bad || !utf8_name_ok(s.name) || servers_find(ps->servers, s.name) >= 0) {
 		ps->skipped++;
@@ -187,7 +208,9 @@ static void XMLCALL on_start(void *ud, const XML_Char *el, const XML_Char **attr
 
 	ps->depth++;
 	if (ps->depth == 1) {
-		ps->root_ok = strcmp(el, "nextcloudhandler") == 0;
+		/* also the list of Nextcloud Handler 0.38 and 0.39 */
+		ps->root_ok = strcmp(el, "webdavhandler") == 0 ||
+		              strcmp(el, "nextcloudhandler") == 0;
 		return;
 	}
 	if (ps->depth == 2 && ps->root_ok && strcmp(el, "server") == 0)
@@ -258,7 +281,7 @@ static int parse_file(const char *file, struct parse *ps, char *err, size_t errl
 		rc = -EINVAL;
 	} else if (!ps->root_ok) {
 		if (err != NULL)
-			snprintf(err, errlen, "%s is not a nextcloud-handler file.", file);
+			snprintf(err, errlen, "%s is not a webdav-handler file.", file);
 		rc = -EINVAL;
 	} else if (ps->failed) {
 		rc = -ENOMEM;
@@ -350,7 +373,7 @@ int servers_save(const char *file, const server_list *l)
 	f = fopen(tmp, "wb");
 	if (f == NULL)
 		return -(errno != 0 ? errno : EIO);
-	fputs("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<nextcloudhandler version=\"1\">\n", f);
+	fputs("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<webdavhandler version=\"1\">\n", f);
 	for (i = 0; i < l->count; i++) {
 		const server_cfg *s = &l->server[i];
 
@@ -361,9 +384,10 @@ int servers_save(const char *file, const server_list *l)
 		put_attr(f, "password", s->password);
 		put_attr(f, "cafile", s->cafile);
 		put_attr(f, "insecure", s->insecure ? "1" : "0");
+		put_attr(f, "type", server_type_name(s->type));
 		fputs("/>\n", f);
 	}
-	fputs("</nextcloudhandler>\n", f);
+	fputs("</webdavhandler>\n", f);
 	bad = ferror(f);
 	if (fclose(f) != 0 || bad) {
 		remove(tmp);

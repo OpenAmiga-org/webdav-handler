@@ -1,14 +1,14 @@
-/* nextcloud-handler - AmigaOS 4 filesystem handler for Nextcloud and other
- * WebDAV servers, built on filesysbox.library and clib4. Public domain.
+/* webdav-handler - AmigaOS 4 filesystem handler for WebDAV servers,
+ * with the extras of Nextcloud, built on filesysbox.library and clib4. Public domain.
  *
- * DOSDriver (device NCH:):
- *   Handler   = L:nextcloud-handler
+ * DOSDriver (device WDV:):
+ *   Handler   = L:webdav-handler
  *   StackSize = 262144
  *   Priority  = 5
  *   GlobVec   = -1
  *
- * The root of the volume lists the servers of the server list (nchprefs,
- * ENV:NextcloudHandler/servers.xml); a server is connected when its folder
+ * The root of the volume lists the servers of the server list (wdvprefs,
+ * ENV:WebDAVHandler/servers.xml); a server is connected when its folder
  * is first used.
  *
  * This process (the handler process DOS starts) does all the work: it owns
@@ -18,6 +18,7 @@
  */
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <proto/intuition.h>
 #include <dos/dosextens.h>
 #include <workbench/startup.h>
 
@@ -38,9 +39,9 @@
 #include "rpc.h"
 #include "version.h"
 
-static const char __attribute__((used)) verstag[] = NCH_VERSTAG;
+static const char __attribute__((used)) verstag[] = WDV_VERSTAG;
 
-#define NCH_MAGIC     0x4E434853UL   /* 'NCHS' */
+#define WDV_MAGIC     0x57445653UL   /* 'WDVS' */
 
 /* ------------------------------------------------------------------------
  * Startup
@@ -54,7 +55,7 @@ static const char __attribute__((used)) verstag[] = NCH_VERSTAG;
  * there for clib4, one without a reply port. It must not use the C library.
  * ------------------------------------------------------------------------ */
 
-struct nch_start {
+struct wdv_start {
 	struct WBStartup  wbs;
 	struct WBArg      arg;
 	struct DosPacket *pkt;
@@ -64,11 +65,64 @@ struct nch_start {
 /* clib4's _start; renamed to clib4_crt_start after linking (tools/os4.mk) */
 extern int _start(STRPTR args, int32 arglen, struct Library *sysbase);
 
-int32 nch_entry(STRPTR args, int32 arglen, struct Library *sysbase)
+/* the clib4.library the program was built against */
+#define CLIB4_VERSION  2
+#define CLIB4_REVISION 5
+
+/* clib4's startup code ends the program when clib4.library is too old,
+ * and DOS would then wait for the handler's answer for ever: a DOSDriver
+ * with Activate = 1 stops the boot. So the version is checked here first;
+ * without the C library: Exec, DOS and Intuition only. (The same check as
+ * in sftp-handler.) */
+static int clib4_ok(struct ExecIFace *iexec, struct DosPacket *pkt)
+{
+	struct Library *lib = iexec->OpenLibrary("clib4.library", 0);
+	struct Library *ibase, *dbase;
+	struct IntuitionIFace *iint;
+	struct DOSIFace *idos;
+	int ok = lib != NULL && (lib->lib_Version > CLIB4_VERSION ||
+	         (lib->lib_Version == CLIB4_VERSION && lib->lib_Revision >= CLIB4_REVISION));
+
+	if (lib != NULL)
+		iexec->CloseLibrary(lib);
+	if (ok)
+		return 1;
+	ibase = iexec->OpenLibrary("intuition.library", 50);
+	if (ibase != NULL) {
+		iint = (struct IntuitionIFace *)iexec->GetInterface(ibase, "main", 1, NULL);
+		if (iint != NULL) {
+			struct EasyStruct es;
+
+			es.es_StructSize = sizeof(es);
+			es.es_Flags = 0;
+			es.es_Title = (STRPTR)WDV_VERS;
+			es.es_TextFormat = (STRPTR)"webdav-handler needs clib4.library 2.5 or newer.\n"
+			                           "OS4Depot: development/library/misc/clib4.lha";
+			es.es_GadgetFormat = (STRPTR)"OK";
+			es.es_Screen = NULL;
+			es.es_TagList = NULL;
+			iint->EasyRequestArgs(NULL, &es, NULL, NULL);
+			iexec->DropInterface((struct Interface *)iint);
+		}
+		iexec->CloseLibrary(ibase);
+	}
+	dbase = iexec->OpenLibrary("dos.library", 50);
+	if (dbase != NULL) {
+		idos = (struct DOSIFace *)iexec->GetInterface(dbase, "main", 1, NULL);
+		if (idos != NULL) {
+			idos->ReplyPkt(pkt, DOSFALSE, ERROR_INVALID_RESIDENT_LIBRARY);
+			iexec->DropInterface((struct Interface *)idos);
+		}
+		iexec->CloseLibrary(dbase);
+	}
+	return 0;
+}
+
+int32 wdv_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 {
 	struct ExecIFace *iexec = (struct ExecIFace *)((struct ExecBase *)sysbase)->MainInterface;
 	struct Process *me = (struct Process *)iexec->FindTask(NULL);
-	struct nch_start st;
+	struct wdv_start st;
 
 	if (me->pr_CLI == ZERO) {
 		struct Message *msg;
@@ -78,12 +132,14 @@ int32 nch_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 		msg = iexec->GetMsg(&me->pr_MsgPort);
 		pkt = (struct DosPacket *)msg->mn_Node.ln_Name;
 		if (pkt != NULL && pkt->dp_Link == msg) {
+			if (!clib4_ok(iexec, pkt))
+				return RETURN_FAIL;
 			/* every field set by hand: no memset() before the C library
 			 * is ready */
 			st.pkt = pkt;
-			st.magic = NCH_MAGIC;
+			st.magic = WDV_MAGIC;
 			st.arg.wa_Lock = ZERO;
-			st.arg.wa_Name = (STRPTR)"nextcloud-handler";
+			st.arg.wa_Name = (STRPTR)"webdav-handler";
 			st.wbs.sm_Message.mn_Node.ln_Succ = NULL;
 			st.wbs.sm_Message.mn_Node.ln_Pred = NULL;
 			st.wbs.sm_Message.mn_Node.ln_Type = NT_MESSAGE;
@@ -107,7 +163,7 @@ int32 nch_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 /* ------------------------------------------------------------------------
  * Settings
  *
- * The servers are kept in ENV:NextcloudHandler/servers.xml (nchprefs);
+ * The servers are kept in ENV:WebDAVHandler/servers.xml (wdvprefs);
  * the Startup line only holds settings for the whole volume.
  * ------------------------------------------------------------------------ */
 
@@ -453,12 +509,12 @@ static int handler_main(struct DosPacket *pkt)
 		snprintf(msg, sizeof(msg),
 		         "The DOSDriver %s: was made for nextcloud-handler 0.37\n"
 		         "or older: its Startup line names one server (URL=...).\n\n"
-		         "nextcloud-handler now shows all your servers in one device,\n"
-		         "NCH:. Start SYS:Prefs/nchprefs: it takes the server over from\n"
-		         "this DOSDriver. Then delete the DOSDriver %s and mount\n"
-		         "DEVS:DOSDrivers/NCH instead. See NextcloudHandler.guide.",
+		         "webdav-handler shows all your servers in one device, WDV:.\n"
+		         "Start SYS:Prefs/wdvprefs: it takes the server over from this\n"
+		         "DOSDriver. Then delete the DOSDriver %s and mount\n"
+		         "DEVS:DOSDrivers/WDV instead. See WebDAVHandler.guide.",
 		         g.device, g.device);
-		req_message(NCH_VERS, msg);
+		req_message(WDV_VERS, msg);
 		err = ERROR_REQUIRED_ARG_MISSING;
 		goto fail;
 	}
@@ -468,7 +524,7 @@ static int handler_main(struct DosPacket *pkt)
 		snprintf(msg, sizeof(msg),
 		         "The Startup line of the DOSDriver %s: is not valid.\n\n"
 		         "Expected: %s", g.device, template);
-		req_message(NCH_VERS, msg);
+		req_message(WDV_VERS, msg);
 		goto fail;
 	}
 
@@ -479,7 +535,7 @@ static int handler_main(struct DosPacket *pkt)
 	g.readonly = args[A_READONLY] != 0;
 	noicons = args[A_NOICONS] != 0;
 	snprintf(g.volume, sizeof(g.volume), "%s",
-	         args[A_VOLUME] ? (const char *)args[A_VOLUME] : "Nextcloud");
+	         args[A_VOLUME] ? (const char *)args[A_VOLUME] : "WebDAV");
 	if (args[A_CONFIGDIR]) {
 		/* a drawer of its own: ENV: and ENVARC: copies do not apply */
 		snprintf(g.config_dir, sizeof(g.config_dir), "%s", (const char *)args[A_CONFIGDIR]);
@@ -512,7 +568,7 @@ static int handler_main(struct DosPacket *pkt)
 	g.ro.display = g.display;
 	g.ro.ca_path = g.capath[0] != '\0' ? g.capath : NULL;
 	g.ro.proxy = g.proxy[0] != '\0' ? g.proxy : NULL;
-	g.ro.user_agent = NCH_VERS " (AmigaOS 4)";
+	g.ro.user_agent = WDV_VERS " (AmigaOS 4)";
 	g.ro.cache_ms = args[A_CACHETIME] ? *(int32 *)args[A_CACHETIME] * 1000 : 5000;
 	g.ro.connect_timeout = 20;
 	g.ro.io_timeout = args[A_TIMEOUT] ? *(int32 *)args[A_TIMEOUT] : 60;
@@ -526,7 +582,7 @@ static int handler_main(struct DosPacket *pkt)
 	argbuf = NULL;
 
 	if (amissl_open() != 0) {
-		req_message(NCH_VERS, "This handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
+		req_message(WDV_VERS, "This handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
 		            "AmiSSL: https://github.com/jens-maus/amissl/releases\n"
 		            "or OS4Depot: library/misc/amissl.lha");
 		err = ERROR_INVALID_RESIDENT_LIBRARY;
@@ -543,7 +599,7 @@ static int handler_main(struct DosPacket *pkt)
 	plat_log(LOG_INFO, "%s: servers from %s/%s\n", g.device, g.config_dir, CFG_SERVERS);
 
 	if (fbx_start(pkt, g.device, g.volume, g.readonly) != 0) {
-		req_message(NCH_VERS, "This handler needs filesysbox.library 54.8 or newer.");
+		req_message(WDV_VERS, "This handler needs filesysbox.library 54.8 or newer.");
 		err = ERROR_INVALID_RESIDENT_LIBRARY;
 		goto fail;
 	}
@@ -578,16 +634,16 @@ fail:
 
 int main(int argc, char **argv)
 {
-	struct nch_start *st = (struct nch_start *)argv;
+	struct wdv_start *st = (struct wdv_start *)argv;
 
 	if (argc > 0) {
 		printf("%s (%s)\n"
-		       "A filesystem handler for Nextcloud and WebDAV servers.\n"
-		       "It is started by mounting a DOSDriver, see NextcloudHandler.guide.\n",
-		       NCH_VERS, NCH_DATE);
+		       "A filesystem handler for WebDAV servers, Nextcloud included.\n"
+		       "It is started by mounting a DOSDriver, see WebDAVHandler.guide.\n",
+		       WDV_VERS, WDV_DATE);
 		return RETURN_OK;
 	}
-	if (st == NULL || st->magic != NCH_MAGIC)
+	if (st == NULL || st->magic != WDV_MAGIC)
 		return RETURN_FAIL; /* Workbench start */
 	signal(SIGINT, SIG_IGN);
 	return handler_main(st->pkt);

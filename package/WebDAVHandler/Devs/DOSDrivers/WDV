@@ -1,0 +1,10 @@
+/* webdav-handler DOSDriver: device WDV:, see WebDAVHandler.guide.
+ * The servers are set up with SYS:Prefs/wdvprefs; each one is a folder
+ * in WDV:. Startup options (all optional): VOLUME=name CACHETIME=seconds
+ * TIMEOUT=seconds CHUNKSIZE=MB TEMPDIR=drawer KEEPDIR=drawer CAPATH=drawer
+ * PROXY=host:port NOICONS READONLY CHARSET=name DEBUG */
+Handler   = L:webdav-handler
+StackSize = 262144
+Priority  = 5
+GlobVec   = -1
+Activate  = 1
