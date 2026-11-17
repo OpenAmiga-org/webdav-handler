@@ -332,3 +332,44 @@ int path_is_under(const char *path, const char *prefix)
 		return 0;
 	return path[n] == '\0' || path[n] == '/';
 }
+
+char *text_wrap(const char *s, size_t width)
+{
+	size_t n = strlen(s), col = 0, i, o = 0, last_space = (size_t)-1;
+	/* every cut can add one line break */
+	char *out = malloc(n + n / (width > 0 ? width : 1) + 2);
+
+	if (out == NULL)
+		return NULL;
+	for (i = 0; i < n; i++) {
+		char c = s[i];
+
+		if (c == '\n') {
+			out[o++] = c;
+			col = 0;
+			last_space = (size_t)-1;
+			continue;
+		}
+		/* UTF-8 continuation bytes take no room of their own */
+		if (((unsigned char)c & 0xC0) != 0x80)
+			col++;
+		if (c == ' ')
+			last_space = o;
+		out[o++] = c;
+		if (col > width) {
+			if (last_space != (size_t)-1) {
+				out[last_space] = '\n';
+				col = 0;
+				for (size_t k = last_space + 1; k < o; k++)
+					if (((unsigned char)out[k] & 0xC0) != 0x80)
+						col++;
+			} else if (i + 1 < n && s[i + 1] != '\n') {
+				out[o++] = '\n';
+				col = 0;
+			}
+			last_space = (size_t)-1;
+		}
+	}
+	out[o] = '\0';
+	return out;
+}

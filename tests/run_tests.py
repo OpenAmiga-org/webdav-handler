@@ -13,6 +13,7 @@ import hashlib
 import os
 import random
 import ssl
+import stat
 import subprocess
 import sys
 import time
@@ -29,7 +30,10 @@ WORK = os.environ.get("NCH_TESTDIR", "/tmp/nch-test")
 MNT = os.path.join(WORK, "mnt")
 KEEP = os.path.join(WORK, "kept")
 TMP = os.path.join(WORK, "tmp")
+CONF = os.path.join(WORK, "config")
+ICON = os.path.join(WORK, "def_drawer.info")
 CACHE_MS = 1000
+SERVER = "Test"     # the tests below work in this server's folder
 
 
 def load_env():
@@ -119,21 +123,56 @@ def occ(*args):
                           capture_output=True, text=True, check=True).stdout
 
 
+# --- server list -----------------------------------------------------------------
+
+def server_xml(name, url, user="", password="", cafile="", insecure=0):
+    from xml.sax.saxutils import quoteattr
+    return (f'  <server name={quoteattr(name)} url={quoteattr(url)} user={quoteattr(user)} '
+            f'password={quoteattr(password)} cafile={quoteattr(cafile)} '
+            f'insecure="{insecure}"/>\n')
+
+
+def default_servers():
+    return [
+        server_xml(SERVER, ENV["NC_HTTPS"], USER, ENV["NC_APP_PASS"], CAFILE),
+        # the same account again, to test moves from one server to another
+        server_xml("Second", ENV["NC_HTTPS"], USER, ENV["NC_APP_PASS"], CAFILE),
+        # nothing listens there: may only be tried when it is opened
+        server_xml("Away", "https://127.0.0.1:9", "nobody", "x"),
+    ]
+
+
+def write_servers(entries):
+    os.makedirs(CONF, exist_ok=True)
+    path = os.path.join(CONF, "servers.xml")
+    with open(path + ".tmp", "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n<nextcloudhandler version="1">\n')
+        f.writelines(entries)
+        f.write("</nextcloudhandler>\n")
+    os.replace(path + ".tmp", path)
+
+
+def read_servers():
+    root = ET.parse(os.path.join(CONF, "servers.xml")).getroot()
+    return {e.get("name"): dict(e.attrib) for e in root.findall("server")}
+
+
 # --- mount ---------------------------------------------------------------------
 
 class Mount:
-    def __init__(self, *extra):
+    def __init__(self, *extra, env=None):
         self.extra = extra
+        self.env = env or {}
         self.proc = None
         self.log = os.path.join(WORK, "fuse.log")
 
     def __enter__(self):
         os.makedirs(MNT, exist_ok=True)
         os.makedirs(TMP, exist_ok=True)
-        env = dict(os.environ, NCH_PASSWORD=ENV["NC_APP_PASS"])
+        env = dict(os.environ, **self.env)
         self.logf = open(self.log, "a")
         self.proc = subprocess.Popen(
-            [BIN, "--url", ENV["NC_HTTPS"], "--user", USER, "--cafile", CAFILE,
+            [BIN, "--config", CONF, "--icon", ICON,
              "--cache-ms", str(CACHE_MS), "--tempdir", TMP, "--keepdir", KEEP,
              "--debug" if os.environ.get("NCH_DEBUG") else "--verbose",
              *self.extra, MNT, "-f"],
@@ -156,7 +195,13 @@ class Mount:
 
 
 def m(path):
-    return os.path.join(MNT, path.lstrip("/"))
+    """path in the test server's folder"""
+    return os.path.join(MNT, SERVER, path.lstrip("/"))
+
+
+def log_text():
+    with open(os.path.join(WORK, "fuse.log"), errors="replace") as f:
+        return f.read()
 
 
 def expect_errno(code, fn, *args):
@@ -437,7 +482,113 @@ def t_big_over_2gib(d):
         assert f.read() == blk[(size - 17) % len(blk):(size % len(blk)) or None]
 
 
-TESTS = [t_small_file, t_names, t_case_insensitive, t_overwrite, t_update_in_place,
+# --- the root of servers ------------------------------------------------------------
+
+def t_root_lists_servers(d):
+    names = sorted(os.listdir(MNT))
+    assert names == sorted(["Away", "Away.info", "Second", "Second.info", "Test", "Test.info"]), names
+    st = os.stat(os.path.join(MNT, "Away"))
+    assert stat.S_ISDIR(st.st_mode)
+    assert "Away: connecting" not in log_text(), "a server's folder must not connect by itself"
+    # the icon is the drawer icon given with --icon
+    assert open(os.path.join(MNT, "Away.info"), "rb").read() == open(ICON, "rb").read()
+    # opening it connects, and fails
+    expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "Away"))
+    assert "Away: connecting" in log_text()
+    assert "*** Nextcloud: Away ***" in log_text(), "the problem must be shown once"
+    # within 10 s it is not tried again, and the problem is not shown again
+    n = log_text().count("Away: connecting")
+    expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "Away"))
+    assert log_text().count("Away: connecting") == n
+    # server names are found without regard to case
+    assert os.path.isdir(os.path.join(MNT, "test", d.lstrip("/")))
+
+
+def t_root_read_only(d):
+    expect_errno(errno.EROFS, os.mkdir, os.path.join(MNT, "New"))
+    expect_errno(errno.EEXIST, os.mkdir, os.path.join(MNT, "Test"))
+    expect_errno(errno.EROFS, os.rmdir, os.path.join(MNT, "Second"))
+    expect_errno(errno.EROFS, os.rename, os.path.join(MNT, "Second"), os.path.join(MNT, "Third"))
+    expect_errno(errno.EROFS, os.unlink, os.path.join(MNT, "Second.info"))
+    expect_errno(errno.EROFS, open, os.path.join(MNT, "file"), "wb")
+    expect_errno(errno.EROFS, os.rename, m(d), os.path.join(MNT, "Moved"))
+    assert sorted(n for n in os.listdir(MNT) if not n.endswith(".info")) == ["Away", "Second", "Test"]
+
+
+def t_between_servers(d):
+    with open(m(d + "/a"), "wb") as f:
+        f.write(b"a")
+    other = os.path.join(MNT, "Second", d.lstrip("/"))
+    # the same files, seen through the second server
+    assert open(os.path.join(other, "a"), "rb").read() == b"a"
+    expect_errno(errno.EXDEV, os.rename, m(d + "/a"), os.path.join(other, "b"))
+    assert srv_get(d + "/a") == b"a" and srv_get(d + "/b") is None
+
+
+def t_server_list_changes(d):
+    try:
+        write_servers(default_servers() + [server_xml("Extra", ENV["NC_HTTPS"], USER,
+                                                      ENV["NC_APP_PASS"], CAFILE)])
+        assert "Extra" in os.listdir(MNT)
+        assert os.path.isdir(os.path.join(MNT, "Extra", d.lstrip("/")))
+        # a broken file keeps the servers there are
+        with open(os.path.join(CONF, "servers.xml"), "w") as f:
+            f.write("<nextcloudhandler><server name=")
+        time.sleep(1.2)
+        assert "Extra" in os.listdir(MNT)
+        assert "server list cannot be read" in log_text()
+    finally:
+        write_servers(default_servers())
+    time.sleep(1.2)
+    assert "Extra" not in os.listdir(MNT)
+
+
+def t_password_questions(d):
+    # no password in the list: asked for, and remembered when wanted
+    write_servers(default_servers() + [
+        server_xml("Ask", ENV["NC_HTTPS"], USER, "", CAFILE),
+        server_xml("Wrong", ENV["NC_HTTPS"], USER, "not-the-password", CAFILE)])
+    try:
+        time.sleep(1.2)
+        ask = os.path.join(MNT, "Ask", d.lstrip("/"))
+        wrong = os.path.join(MNT, "Wrong", d.lstrip("/"))
+        assert os.listdir(ask) == []
+        assert "password requester: Ask" in log_text()
+        assert read_servers()["Ask"]["password"] == ENV["NC_APP_PASS"], "remembered"
+        # a wrong password in the list: asked again, with the reason
+        assert os.listdir(wrong) == []
+        assert "password requester: Wrong" in log_text()
+        assert "did not accept the password" in log_text()
+        assert read_servers()["Wrong"]["password"] == ENV["NC_APP_PASS"]
+        assert read_servers()["Test"]["password"] == ENV["NC_APP_PASS"], "others kept"
+    finally:
+        write_servers(default_servers())
+
+
+def t_password_cancelled(d):
+    # a second mount whose password requester is cancelled
+    global MNT
+    old = MNT
+    write_servers(default_servers() + [server_xml("Cancel", ENV["NC_HTTPS"], USER, "", CAFILE)])
+    MNT = os.path.join(WORK, "mnt-cancel")
+    try:
+        with Mount():
+            cancel = os.path.join(MNT, "Cancel")
+            expect_errno(errno.ENODEV, os.listdir, cancel)
+            n = log_text().count("password requester: Cancel")
+            assert n == 1, n
+            # not asked again (Workbench looks at open folders all the time)
+            expect_errno(errno.ENODEV, os.listdir, cancel)
+            assert log_text().count("password requester: Cancel") == n
+            assert "password" not in read_servers()["Cancel"] or read_servers()["Cancel"]["password"] == ""
+    finally:
+        MNT = old
+        write_servers(default_servers())
+
+
+TESTS = [t_root_lists_servers, t_root_read_only, t_between_servers, t_server_list_changes,
+         t_password_questions, t_password_cancelled,
+         t_small_file, t_names, t_case_insensitive, t_overwrite, t_update_in_place,
          t_empty_file, t_truncate, t_large_and_ranges, t_changed_while_reading, t_mkdir_rmdir,
          t_rmdir_sees_server_files, t_rename, t_unlink, t_mtime, t_comment,
          t_server_changes_seen, t_many_files, t_statfs, t_quota_failure, t_readonly]
@@ -452,11 +603,16 @@ def main():
         name = args[args.index("-k") + 1]
         tests = [t for t in tests if name in t.__name__]
     os.makedirs(WORK, exist_ok=True)
+    if os.path.exists(os.path.join(WORK, "fuse.log")):
+        os.unlink(os.path.join(WORK, "fuse.log"))
+    with open(ICON, "wb") as f:
+        f.write(b"\xe3\x10\x00\x01 a drawer icon" + bytes(range(256)))
+    write_servers(default_servers())
     dav("DELETE", "/T")
     st, _ = dav("MKCOL", "/T")
     assert st == 201, st
     failed = 0
-    with Mount():
+    with Mount(env={"NCH_ASK_PASSWORD": ENV["NC_APP_PASS"], "NCH_REMEMBER": "1"}):
         for t in tests:
             d = "/T/" + t.__name__[2:]
             assert dav("MKCOL", d)[0] == 201

@@ -2,12 +2,13 @@
 """Draws the pictures of the release icons. The pictures are drawn here, so
 the icons are as free as the rest of the project. Public domain.
 
-    python3 -I tools/make_icons.py OUTDIR
+    python3 -I tools/make_icons.py OUTDIR [NAME...]
 
 writes OUTDIR/<icon>.argb and .sel.argb (64x64 ARGB, normal and selected)
 and OUTDIR/mkicons.script, an AmigaDOS script that runs tools/os4/mkicon in
 the OS4 guest; icon.library then saves the icons in its own format
 (AmigaOS 4 does not read PNG icons). The results are kept in package/icons.
+With NAMEs ("Prefs/nchprefs") only those icons are made.
 """
 import sys
 
@@ -101,6 +102,18 @@ def img_text():
     return finish(im)
 
 
+def img_prefs():
+    im, d = canvas()
+    # a panel with two sliders, and the cloud above
+    d.rounded_rectangle(s(6, 6, 58, 58), radius=8 * SS, fill=(225, 225, 232, 255),
+                        outline=DARK, width=2 * SS)
+    cloud(d, 32, 22, 0.8, WHITE, BLUE)
+    for y, x in ((40, 22), (50, 40)):
+        d.line(s(14, y, 50, y), fill=LINE, width=3 * SS)
+        d.rounded_rectangle(s(x - 4, y - 4, x + 4, y + 4), radius=2 * SS, fill=BLUE, outline=DARK)
+    return finish(im)
+
+
 def img_install():
     im, d = canvas()
     d.polygon(s(8, 24, 32, 14, 56, 24, 32, 34), fill=(236, 196, 96, 255), outline=DARK)
@@ -118,10 +131,12 @@ ICONS = {
     "NextcloudHandler.guide": (img_guide, WBPROJECT, "SYS:Utilities/MultiView", (), 32768, None),
     "LICENSE.txt": (img_text, WBPROJECT, "SYS:Utilities/MultiView", (), 32768, None),
     "Third-party.txt": (img_text, WBPROJECT, "SYS:Utilities/MultiView", (), 32768, None),
-    "Devs/DOSDrivers/NC0": (img_dosdriver, WBPROJECT, "C:Mount", (), 16384, None),
+    "Devs/DOSDrivers/NCH": (img_dosdriver, WBPROJECT, "C:Mount", (), 16384, None),
     "Devs": (img_drawer, WBDRAWER, None, (), None, (100, 80, 300, 160)),
     "Devs/DOSDrivers": (img_drawer, WBDRAWER, None, (), None, (120, 100, 300, 160)),
     "L": (img_drawer, WBDRAWER, None, (), None, (120, 100, 300, 160)),
+    "Prefs": (img_drawer, WBDRAWER, None, (), None, (120, 100, 300, 160)),
+    "Prefs/nchprefs": (img_prefs, WBTOOL, None, (), 131072, None),
 }
 
 
@@ -142,7 +157,10 @@ def main():
     os.makedirs(out, exist_ok=True)
     lines = ["; created by tools/make_icons.py; run in the drawer with the .argb files",
              "FailAt 21"]
+    only = sys.argv[2:]
     for name, (fn, typ, tool, tts, stack, drawer) in ICONS.items():
+        if only and name not in only:
+            continue
         flat = name.replace("/", "_")
         img = fn()
         with open(os.path.join(out, flat + ".argb"), "wb") as f:
@@ -165,7 +183,7 @@ def main():
         f.write("\n".join(lines) + "\n")
     # also a preview sheet for checking the pictures
     sheet = Image.new("RGBA", (SIZE * 6 + 70, SIZE + 20), (200, 200, 200, 255))
-    for i, fn in enumerate((img_drawer, img_dosdriver, img_guide, img_text, img_install)):
+    for i, fn in enumerate((img_drawer, img_dosdriver, img_guide, img_text, img_install, img_prefs)):
         sheet.alpha_composite(fn(), (10 + i * (SIZE + 12), 10))
     sheet.save(os.path.join(out, "icons-preview.png"))
 

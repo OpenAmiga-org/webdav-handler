@@ -1,0 +1,10 @@
+/* nextcloud-handler DOSDriver: device NCH:, see NextcloudHandler.guide.
+ * The servers are set up with SYS:Prefs/nchprefs; each one is a folder
+ * in NCH:. Startup options (all optional): VOLUME=name CACHETIME=seconds
+ * TIMEOUT=seconds CHUNKSIZE=MB TEMPDIR=drawer KEEPDIR=drawer CAPATH=drawer
+ * PROXY=host:port NOICONS READONLY CHARSET=name DEBUG */
+Handler   = L:nextcloud-handler
+StackSize = 262144
+Priority  = 5
+GlobVec   = -1
+Activate  = 1

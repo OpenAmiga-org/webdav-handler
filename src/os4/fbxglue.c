@@ -65,6 +65,9 @@ static int fbxerr(int err)
 		return -NEWLIB_ENODATA;
 	if (err == -ENOTSUP)
 		return -NEWLIB_EOPNOTSUPP;
+	/* from one server to another: filesysbox would show "Error -1" */
+	if (err == -EXDEV)
+		return -NEWLIB_EOPNOTSUPP;
 	return err;
 }
 
@@ -109,7 +112,7 @@ static void fill_stat(const ncfs_stat *ns, struct fbx_stat *st)
 	st->st_blocks = (ns->size + 511) >> 9;
 }
 
-#define FH(fi) ((ncfs_file *)(uint32)(fi)->fh)
+#define FH(fi) ((ncroot_file *)(uint32)(fi)->fh)
 
 /* --- callbacks --------------------------------------------------------- */
 

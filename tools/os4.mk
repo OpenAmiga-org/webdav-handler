@@ -21,14 +21,20 @@ OBJCOPY  = ppc-amigaos-objcopy
 LIBS     = -lcurl -lamisslstubs -lz -lexpat -lpthread
 STRIPFLAGS = -R.comment --strip-unneeded-rel-relocs
 
-CORE_SRC = src/core/util.c src/core/charset.c src/core/davxml.c src/core/davclient.c src/core/ncfs.c
+CORE_SRC = src/core/util.c src/core/charset.c src/core/davxml.c src/core/davclient.c src/core/ncfs.c \
+           src/core/servers.c src/core/ncroot.c
 OS4_SRC  = src/os4/main.c src/os4/platform_os4.c src/os4/requesters.c src/os4/amissl.c
 # The filesysbox callbacks run in other tasks and must not call the C
 # library, so keep the compiler from turning loops into library calls.
 GLUE_SRC = src/os4/fbxglue.c
 GLUE_FLAGS = -fno-builtin -fno-tree-loop-distribute-patterns
 
-.PHONY: handler curltest curlspeed
+# nchprefs tests connections with the handler's own WebDAV code
+PREFS_SRC = src/prefs/nchprefs.c src/core/util.c src/core/charset.c src/core/davxml.c \
+            src/core/davclient.c src/core/servers.c \
+            src/os4/platform_os4.c src/os4/requesters.c src/os4/amissl.c
+
+.PHONY: handler prefs curltest curlspeed
 
 handler: build/os4/nextcloud-handler
 
@@ -41,6 +47,12 @@ build/os4/nextcloud-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(wildca
 	# which runs before clib4's startup code (see src/os4/main.c).
 	$(OBJCOPY) --redefine-sym _start=clib4_crt_start --redefine-sym nch_entry=_start $@.link $@.debug
 	rm -f $@.link
+	$(STRIP) $(STRIPFLAGS) -o $@ $@.debug
+
+prefs: build/os4/nchprefs
+
+build/os4/nchprefs: $(PREFS_SRC) $(wildcard src/core/*.h src/os4/*.h)
+	$(CC) $(CFLAGS) -o $@.debug $(PREFS_SRC) $(LDFLAGS) $(LIBS)
 	$(STRIP) $(STRIPFLAGS) -o $@ $@.debug
 
 curltest: build/os4/curltest

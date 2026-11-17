@@ -24,6 +24,19 @@ int plat_loglevel = LOG_ERR;
 int plat_debug_serial = 0;
 int plat_charset = -1;   /* convert messages from UTF-8 when >= 0 */
 
+/* The ENV variable Charset through dos.library: clib4's getenv() finds
+ * nothing in a handler process. */
+int os4_charset(const char *given)
+{
+	char buf[64];
+
+	if (given != NULL)
+		return cs_from_name(given);
+	if (IDOS->GetVar("Charset", buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+		return cs_from_name(buf);
+	return cs_from_name(NULL);
+}
+
 struct tmpf {
 	int     fd;
 	int64_t pos;   /* file position, -1 when not known */
@@ -229,11 +242,46 @@ int plat_resolve(const char *host, char *ip, size_t iplen)
 	return 0;
 }
 
+static char *to_local(const char *utf8)
+{
+	return plat_charset >= 0 ? cs_utf8_to_message(plat_charset, utf8) : NULL;
+}
+
 void plat_report(const char *title, const char *message)
 {
-	char *local = plat_charset >= 0 ? cs_utf8_to_message(plat_charset, message) : NULL;
+	char *local = to_local(message), *ltitle = to_local(title);
 
 	plat_log(LOG_ERR, "%s: %s\n", title, message);
-	req_message(title, local != NULL ? local : message);
+	req_message(ltitle != NULL ? ltitle : title, local != NULL ? local : message);
 	free(local);
+	free(ltitle);
+}
+
+int plat_ask_password(const char *server, const char *user, const char *url,
+                      const char *problem, char *buf, size_t buflen, int *remember)
+{
+	char text[1400], title[400];
+	char *ltext, *ltitle;
+	int ok;
+
+	snprintf(title, sizeof(title), "nextcloud-handler: %s", server);
+	snprintf(text, sizeof(text), "%s%sPassword of \"%s\" on\n%s",
+	         problem != NULL ? problem : "", problem != NULL ? "\n\n" : "", user, url);
+	ltext = to_local(text);
+	ltitle = to_local(title);
+	ok = req_password(ltitle != NULL ? ltitle : title, ltext != NULL ? ltext : text,
+	                  buf, buflen, remember);
+	free(ltext);
+	free(ltitle);
+	if (ok && plat_charset >= 0) {
+		/* typed in the local character set; the server wants UTF-8 */
+		char *u = cs_local_to_utf8(plat_charset, buf);
+
+		if (u != NULL) {
+			snprintf(buf, buflen, "%s", u);
+			memset(u, 0, strlen(u));
+			free(u);
+		}
+	}
+	return ok;
 }

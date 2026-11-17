@@ -39,7 +39,14 @@ void    plat_log(int level, const char *fmt, ...)
 int     plat_resolve(const char *host, char *ip, size_t iplen);
 
 /* Tells the user about a problem that cannot be returned as an error code,
- * for example a failed upload when a file is closed. */
+ * for example a failed upload when a file is closed. Title and message are
+ * UTF-8. */
 void    plat_report(const char *title, const char *message);
+
+/* Asks for the password of a server (all strings UTF-8). problem: why it
+ * is asked again, or NULL. Returns 1 for OK (password in buf, *remember
+ * set), 0 for Cancel. */
+int     plat_ask_password(const char *server, const char *user, const char *url,
+                          const char *problem, char *buf, size_t buflen, int *remember);
 
 #endif

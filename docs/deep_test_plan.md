@@ -117,3 +117,41 @@ tcp.sendspace at its default 32768 unless noted.
 
 Open: speed on real hardware; tests against the user's own Nextcloud and
 with public certificates (AmiSSL:Certs).
+
+## One device for all servers (2026-11-17, handler 0.38 and 0.39)
+
+0.38 replaced the one-server-per-DOSDriver setup with the device NCH:
+and a server list (nchprefs, `ENV:NextcloudHandler/servers.xml`). The guest
+scripts above still use NC1:; with a test list in `RAM:nch/config`
+(`Startup = "CONFIGDIR=RAM:nch/config DEBUG"`) they run unchanged after
+`Assign NC1: NCH:Test`.
+
+Linux (`tests/run_tests.py`, 26 tests): the 20 file tests now run inside a
+server's folder; new tests cover the root listing without connecting, the
+read-only root, a rename between servers (EXDEV), changes to the server
+list (and a broken list), the password question (asked, remembered in the
+list, asked again after a wrong password) and a cancelled question (not
+asked again).
+
+AmigaOS 4 guest (QEMU AmigaOne, e1000e):
+
+| Check | Result |
+|---|---|
+| Root | `Dir NCH:` lists the servers and a drawer icon each (from ENV:Sys/def_drawer.info), no connection; root entries show `----r-e-` |
+| Servers | HTTPS and HTTP server folders listed; functional.script and nchtest (240/240) pass through `NC1: = NCH:Test` |
+| Root is read-only | MakeDir, Rename, Echo > at the root: "write protected"; Delete of a server folder refused |
+| Between servers | Copy works; Rename gives "packet request type unknown" (EXDEV, documented) |
+| Unreachable server | one requester with the reason, then "no disk in drive" without new tries for 10 s |
+| Password | requester "nextcloud-handler: Ask"; Cancel gives "no disk" and no new requester; DiskChange NCH: asks again |
+| List changes | servers added to `servers.xml` appear at once; a name with umlauts and the euro sign works |
+| Old DOSDriver | Startup with URL=: requester explaining the change, the device does not start |
+| nchprefs | takes over two old DOSDrivers (password from the Startup line and from ENV:NextcloudHandler/NC1.auth, CAFILE, INSECURE, an escaped-quote VOLUME), Test connection (works / fails with the server's reason), Use writes ENV:NextcloudHandler/servers.xml and deletes the old DOSDrivers and .auth files on request |
+| Memory | 2 x 5 mount cycles with two servers connected each: free memory back to the same value |
+
+**Found and fixed in 0.39:** the handler read the character set with
+clib4's getenv(), which finds nothing in a handler process, so names were
+always converted as ISO-8859-1 (the euro sign showed as %u20AC on an
+ISO-8859-15 system; the earlier tests set CHARSET= in the DOSDriver).
+ENV:Charset is now read with dos.library's GetVar(). Long server messages
+(a Nextcloud 401 text is over 300 characters) made requesters wider than
+the screen; requester texts are now broken at 76 characters.

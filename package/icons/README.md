@@ -12,6 +12,7 @@ rest of the project). To change an icon:
 2. Build `tools/os4/mkicon.c` (ppc-amigaos-gcc -mcrt=clib4) and copy it,
    the `.argb` files and the script to a drawer in the OS4 guest.
 3. Run `Execute mkicons.script` in that drawer; the icons appear in `out/`.
-4. Copy them back here. `Devs_DOSDrivers_NC0.info` becomes
-   `Devs/DOSDrivers/NC0.info` and `Devs_DOSDrivers.info` becomes
-   `Devs/DOSDrivers.info` in the archive (tools/make_lha.sh does this).
+4. Copy them back here. `Devs_DOSDrivers_NCH.info` becomes
+   `Devs/DOSDrivers/NCH.info` and `Devs_DOSDrivers.info` becomes
+   `Devs/DOSDrivers.info`, `Prefs_nchprefs.info` becomes `Prefs/nchprefs.info`
+   in the archive (tools/make_lha.sh does this).

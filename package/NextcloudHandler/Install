@@ -9,10 +9,10 @@
 (set #missing "")
 
 (welcome
-  (cat "This installs " #app ", which shows your Nextcloud files as a volume.\n"
-       "It copies the handler to L: and creates a DOSDriver."))
+  (cat "This installs " #app ": the device NCH: shows your Nextcloud and "
+       "WebDAV servers as folders, and the prefs program nchprefs keeps the "
+       "list of servers."))
 
-; Novice mode would not ask for the server and user name
 (if (= @user-level 0) (user 1))
 
 ; --- requirements -------------------------------------------------------
@@ -48,8 +48,38 @@
   )
 )
 
-; --- the handler --------------------------------------------------------
+; --- programs -------------------------------------------------------------
 
+; leftovers of an earlier install (see P_FREE), now no longer in use
+(run "C:Delete >NIL: QUIET L:nextcloud-handler.old SYS:Prefs/nchprefs.old")
+
+; A running handler keeps L:nextcloud-handler in use: it cannot be
+; replaced while NCH: is mounted. Stop it first; it is mounted again at
+; the end.
+(set #wasmounted (= 0 (run "C:Assign >NIL: NCH: EXISTS")))
+(if #wasmounted
+  (
+    (message "NCH: is mounted. To replace the handler, the installer "
+             "stops it now and mounts it again at the end.\n\n"
+             "Close any files you have open on NCH: first.")
+    (run "C:Dismount >NIL: NCH:")
+  )
+)
+
+; A file that is still in use (NCH: could not be stopped, or nchprefs is
+; running) is moved aside, so that the new one can be copied in; the old
+; one goes with the next restart.
+(procedure P_FREE #file
+  (if (exists #file)
+    (if (<> 0 (run (cat "C:Delete >NIL: QUIET \"" #file "\"")))
+      (
+        (run (cat "C:Delete >NIL: QUIET \"" #file ".old\""))
+        (run (cat "C:Rename >NIL: \"" #file "\" \"" #file ".old\""))
+      )
+    )
+  )
+)
+(P_FREE "L:nextcloud-handler")
 (copyfiles
   (prompt "Copying nextcloud-handler to L:")
   (help @copyfiles-help)
@@ -57,75 +87,42 @@
   (dest "L:")
   (confirm "expert"))
 
+(P_FREE "SYS:Prefs/nchprefs")
+(copyfiles
+  (prompt "Copying the prefs program nchprefs to SYS:Prefs")
+  (help @copyfiles-help)
+  (source "Prefs/nchprefs")
+  (dest "SYS:Prefs")
+  (infos)
+  (confirm "expert"))
+
 ; --- the DOSDriver ------------------------------------------------------
-
-(set #device
-  (askstring
-    (prompt "Name of the device (DOSDriver), without a colon.\n"
-            "Use another name for each account (NC0, NC1, ...).")
-    (help @askstring-help)
-    (default "NC0")))
-
-(set #url
-  (askstring
-    (prompt "Address of your Nextcloud server, as you open it in the "
-            "browser, for example:\nhttps://cloud.example.com")
-    (help "The handler finds the WebDAV address of your files by itself. "
-          "For other WebDAV servers enter the full WebDAV address.")
-    (default "https://")))
-
-(set #user
-  (askstring
-    (prompt "Your Nextcloud user name.\n"
-            "With an app password, use the user name Nextcloud showed with it.")
-    (help "See \"App password\" in NextcloudHandler.guide.")
-    (default "")))
-
-(set #volume
-  (askstring
-    (prompt "Name of the volume on Workbench:")
-    (help @askstring-help)
-    (default "Nextcloud")))
 
 (set #activate
   (askbool
-    (prompt "Mount the volume every time the computer starts?\n"
-            "(It connects only when it is first used.)")
+    (prompt "Mount NCH: every time the computer starts?\n"
+            "(It connects to a server only when its folder is opened.)")
     (help @askbool-help)
     (default 1)))
 
-(set #ddfile (tackon "DEVS:DOSDrivers" #device))
-(if (exists #ddfile)
+(set #dddest (if #activate "DEVS:DOSDrivers" "SYS:Storage/DOSDrivers"))
+(if (exists (tackon #dddest "NCH"))
   (if (= 0 (askbool
-        (prompt (cat #ddfile " exists already. Replace it?"))
+        (prompt (cat (tackon #dddest "NCH") " exists already. Replace it?"))
         (help @askbool-help)
-        (default 0)))
-    (exit)
+        (default 1)))
+    (set #dddest "")
   )
 )
-
-(textfile
-  (prompt (cat "Creating " #ddfile))
-  (help @textfile-help)
-  (dest #ddfile)
-  (append "/* nextcloud-handler DOSDriver, see NextcloudHandler.guide */\n")
-  (append "Handler   = L:nextcloud-handler\n")
-  (append "StackSize = 262144\n")
-  (append "Priority  = 5\n")
-  (append "GlobVec   = -1\n")
-  (append (cat "Activate  = " (if #activate "1" "0") "\n"))
-  (append (cat "Startup   = \"URL=" #url
-               (if (= #user "") "" (cat " USER=" #user))
-               " VOLUME=" #volume "\"\n"))
-  (confirm "expert"))
-
-(copyfiles
-  (prompt "Copying the DOSDriver icon")
-  (help @copyfiles-help)
-  (source "Devs/DOSDrivers/NC0.info")
-  (dest "DEVS:DOSDrivers")
-  (newname (cat #device ".info"))
-  (nogauge))
+(if (<> #dddest "")
+  (copyfiles
+    (prompt (cat "Copying the DOSDriver to " #dddest))
+    (help @copyfiles-help)
+    (source "Devs/DOSDrivers/NCH")
+    (dest #dddest)
+    (infos)
+    (nogauge))
+)
 
 ; --- documentation ------------------------------------------------------
 
@@ -149,19 +146,34 @@
 
 ; --- mount now ----------------------------------------------------------
 
-(if (askbool
-      (prompt (cat "Mount " #device ": now?\n\n"
-                   "The first time the volume is used, the handler asks for "
-                   "your password. Tick \"Remember the password\" so that it "
-                   "is not asked again."))
-      (help @askbool-help)
-      (default 1))
-  (if (= 0 (run (cat "C:Assign >NIL: " #device ": EXISTS")))
-    (message (cat #device ": is mounted already. To use the new settings, "
-                  "restart the computer."))
-    (run (cat "C:Mount " #device ":"))
-  )
+; the DOSDriver to mount: the one just copied, or the one that was there
+(set #ddfile "")
+(if (<> #dddest "")
+  (set #ddfile (tackon #dddest "NCH"))
+  (if (exists "DEVS:DOSDrivers/NCH")
+    (set #ddfile "DEVS:DOSDrivers/NCH")
+    (if (exists "SYS:Storage/DOSDrivers/NCH")
+      (set #ddfile "SYS:Storage/DOSDrivers/NCH"))))
+
+(if (= 0 (run "C:Assign >NIL: NCH: EXISTS"))
+  ; still mounted: Dismount did not work (files open on NCH:)
+  (message "NCH: could not be stopped, so the old handler keeps running. "
+           "The new one is used after the computer restarts.")
+  (if (and (<> #ddfile "") (or #wasmounted (<> #dddest "")))
+    (run (cat "C:Mount " #ddfile)))
 )
 
-(exit (cat #app " is installed.\n\nRead " (tackon #docs "NextcloudHandler.guide")
-           " for all settings."))
+; nchprefs also takes the servers over from the DOSDrivers of version
+; 0.37 and older (one device per server), and offers to delete them
+(if (askbool
+      (prompt "Start nchprefs now to set up your servers?\n\n"
+              "If you used an older version with a DOSDriver for each "
+              "server (NC0: and so on), nchprefs takes those servers over.")
+      (help @askbool-help)
+      (default 1))
+  (run "Run >NIL: SYS:Prefs/nchprefs")
+)
+
+(exit (cat #app " is installed.\n\nAdd your servers with SYS:Prefs/nchprefs; "
+           "they appear as folders in NCH:.\nRead " (tackon #docs "NextcloudHandler.guide")
+           " for the details.") (quiet))

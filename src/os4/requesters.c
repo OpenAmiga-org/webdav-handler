@@ -1,5 +1,6 @@
 /* nextcloud-handler - requesters (ReAction). Public domain. */
 #include "os4.h"
+#include "util.h"
 
 #include <proto/exec.h>
 #include <proto/intuition.h>
@@ -14,6 +15,7 @@
 #include <intuition/icclass.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct IntuitionIFace *IIntuition;
@@ -72,26 +74,29 @@ void req_close_libs(void)
 void req_message(const char *title, const char *text)
 {
 	struct EasyStruct es;
+	char *wrapped;
 
 	if (!req_open_libs())
 		return;
+	/* server messages can be long: keep the requester on the screen */
+	wrapped = text_wrap(text, REQ_WIDTH);
 	memset(&es, 0, sizeof(es));
 	es.es_StructSize = sizeof(es);
 	es.es_Title = (STRPTR)title;
 	/* the text goes in as an argument, so '%' in it is harmless */
 	es.es_TextFormat = (STRPTR)"%s";
 	es.es_GadgetFormat = (STRPTR)"OK";
-	IIntuition->EasyRequest(NULL, &es, NULL, text);
+	IIntuition->EasyRequest(NULL, &es, NULL, wrapped != NULL ? wrapped : text);
+	free(wrapped);
 }
 
 enum { GID_PASSWORD = 1, GID_REMEMBER, GID_OK, GID_CANCEL };
 
-int req_password(const char *device, const char *user, const char *server,
-                 const char *problem, char *buf, size_t buflen, int *remember)
+int req_password(const char *title, const char *text, char *buf, size_t buflen,
+                 int *remember)
 {
 	Object *win, *layout, *str, *chk;
 	struct Window *w;
-	char text[512], title[64];
 	uint32 sigmask = 0, result;
 	uint16 code;
 	int done = 0, ok = 0;
@@ -102,11 +107,6 @@ int req_password(const char *device, const char *user, const char *server,
 	    StrCls == NULL || BtnCls == NULL || ChkCls == NULL ||
 	    LblCls == NULL)
 		return 0;
-
-	snprintf(title, sizeof(title), "Nextcloud %s:", device);
-	snprintf(text, sizeof(text), "%s%sPassword for \"%s\" on\n%s",
-	         problem != NULL ? problem : "", problem != NULL ? "\n\n" : "",
-	         user != NULL ? user : "", server);
 
 	win = IIntuition->NewObject(WinCls, NULL,
 		WA_Title, title,
@@ -194,6 +194,8 @@ int req_password(const char *device, const char *user, const char *server,
 		IIntuition->GetAttr(GA_Selected, chk, &sel);
 		snprintf(buf, buflen, "%s", val != NULL ? (const char *)val : "");
 		*remember = sel != 0;
+		if (val != NULL)
+			memset(val, 0, strlen((const char *)val));
 	}
 	IIntuition->DisposeObject(win);
 	return ok;

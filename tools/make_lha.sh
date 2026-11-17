@@ -9,7 +9,8 @@
 #     NextcloudHandler.guide          documentation
 #     LICENSE.txt, Third-party.txt
 #     L/nextcloud-handler
-#     Devs/DOSDrivers/NC0             example DOSDriver
+#     Prefs/nchprefs                  prefs program (the server list)
+#     Devs/DOSDrivers/NCH             DOSDriver
 #   NextcloudHandler.readme           OS4Depot readme
 #
 # The LHA and the readme are also copied to $RELEASES (default: the shared
@@ -28,9 +29,14 @@ ver=$(sed -n 's/^#define NCH_VERSION  *\([0-9]*\)/\1/p' "$VH").$(sed -n 's/^#def
 amigadate=$(sed -n 's/^#define NCH_DATE *"\(.*\)"/\1/p' "$VH")
 isodate=$(date +%Y%m%d)
 bin="$ROOT/build/os4/nextcloud-handler"
+prefs="$ROOT/build/os4/nchprefs"
 
 if ! strings "$bin" | grep -c "nextcloud-handler $ver " > /dev/null; then
 	echo "build/os4/nextcloud-handler is not version $ver; run tools/build_os4.sh" >&2
+	exit 1
+fi
+if ! strings "$prefs" | grep -c "nchprefs $ver " > /dev/null; then
+	echo "build/os4/nchprefs is not version $ver; run tools/build_os4.sh" >&2
 	exit 1
 fi
 
@@ -47,11 +53,12 @@ fi
 
 rm -rf "$STAGE"
 D="$STAGE/NextcloudHandler"
-mkdir -p "$D/L" "$D/Devs/DOSDrivers" "$ROOT/dist"
+mkdir -p "$D/L" "$D/Prefs" "$D/Devs/DOSDrivers" "$ROOT/dist"
 
 cp "$bin" "$D/L/nextcloud-handler"
+cp "$prefs" "$D/Prefs/nchprefs"
 cp "$ROOT/package/NextcloudHandler/Install" "$D/"
-cp "$ROOT/package/NextcloudHandler/Devs/DOSDrivers/NC0" "$D/Devs/DOSDrivers/"
+cp "$ROOT/package/NextcloudHandler/Devs/DOSDrivers/NCH" "$D/Devs/DOSDrivers/"
 sed -e "s/^@\$VER: NextcloudHandler.guide [0-9.]* ([0-9.]*)/@\$VER: NextcloudHandler.guide $ver ($amigadate)/" \
 	"$ROOT/package/NextcloudHandler/NextcloudHandler.guide" > "$D/NextcloudHandler.guide"
 cp "$ROOT/UNLICENSE" "$D/LICENSE.txt"
@@ -93,11 +100,12 @@ sed -e "s/@VERSION@/$ver/" -e "s/@DATE@/$isodate/" \
 # icons made by icon.library itself, see package/icons/README.md
 I="$ROOT/package/icons"
 cp "$I/NextcloudHandler.info" "$STAGE/"
-for f in Install NextcloudHandler.guide LICENSE.txt Third-party.txt L Devs; do
+for f in Install NextcloudHandler.guide LICENSE.txt Third-party.txt L Prefs Devs; do
 	cp "$I/$f.info" "$D/$f.info"
 done
 cp "$I/Devs_DOSDrivers.info" "$D/Devs/DOSDrivers.info"
-cp "$I/Devs_DOSDrivers_NC0.info" "$D/Devs/DOSDrivers/NC0.info"
+cp "$I/Devs_DOSDrivers_NCH.info" "$D/Devs/DOSDrivers/NCH.info"
+cp "$I/Prefs_nchprefs.info" "$D/Prefs/nchprefs.info"
 
 rm -f "$OUT"
 (cd "$STAGE" && "$LHA" aq2o5 "$OUT" NextcloudHandler.info NextcloudHandler.readme NextcloudHandler)

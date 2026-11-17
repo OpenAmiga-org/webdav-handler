@@ -54,4 +54,9 @@ int  path_is_under(const char *path, const char *prefix);
 
 char *xstrdup(const char *s);
 
+/* A copy of a message with lines longer than width broken at spaces (or
+ * cut, when a line has none), so that a requester fits the screen.
+ * malloc'ed; NULL when out of memory. */
+char *text_wrap(const char *s, size_t width);
+
 #endif

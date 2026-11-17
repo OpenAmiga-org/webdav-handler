@@ -1,16 +1,20 @@
 /* nextcloud-handler - AmigaOS 4 filesystem handler for Nextcloud and other
  * WebDAV servers, built on filesysbox.library and clib4. Public domain.
  *
- * DOSDriver:
+ * DOSDriver (device NCH:):
  *   Handler   = L:nextcloud-handler
  *   StackSize = 262144
  *   Priority  = 5
  *   GlobVec   = -1
- *   Startup   = "URL=https://cloud.example.com USER=name VOLUME=Nextcloud"
+ *
+ * The root of the volume lists the servers of the server list (nchprefs,
+ * ENV:NextcloudHandler/servers.xml); a server is connected when its folder
+ * is first used.
  *
  * This process (the handler process DOS starts) does all the work: it owns
- * the clib4 context, the network connection and the cache. A second process
- * runs filesysbox; its callbacks send every call here (fbxglue.c, rpc.h).
+ * the clib4 context, the network connections and the caches. A second
+ * process runs filesysbox; its callbacks send every call here (fbxglue.c,
+ * rpc.h).
  */
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -24,10 +28,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
+#include <strings.h>
 
 #include "charset.h"
-#include "ncfs.h"
+#include "ncroot.h"
+#include "servers.h"
 #include "platform.h"
 #include "os4.h"
 #include "rpc.h"
@@ -36,7 +41,6 @@
 static const char __attribute__((used)) verstag[] = NCH_VERSTAG;
 
 #define NCH_MAGIC     0x4E434853UL   /* 'NCHS' */
-#define RETRY_MS      10000          /* between failed connection attempts */
 
 /* ------------------------------------------------------------------------
  * Startup
@@ -99,42 +103,39 @@ int32 nch_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 	return _start(args, arglen, sysbase);
 }
 
+
 /* ------------------------------------------------------------------------
  * Settings
+ *
+ * The servers are kept in ENV:NextcloudHandler/servers.xml (nchprefs);
+ * the Startup line only holds settings for the whole volume.
  * ------------------------------------------------------------------------ */
 
 static const char template[] =
-	"URL/A,USER/K,PASSWORD/K,VOLUME/K,CACHETIME/K/N,TEMPDIR/K,KEEPDIR/K,"
-	"CAFILE/K,CAPATH/K,INSECURE/S,PROXY/K,TIMEOUT/K/N,CHUNKSIZE/K/N,"
-	"READONLY/S,NOPASSWORDREQ/S,CHARSET/K,DEBUG/S";
+	"VOLUME/K,CONFIGDIR/K,CACHETIME/K/N,TIMEOUT/K/N,CHUNKSIZE/K/N,TEMPDIR/K,"
+	"KEEPDIR/K,CAPATH/K,PROXY/K,NOICONS/S,READONLY/S,CHARSET/K,DEBUG/S";
 
 enum {
-	A_URL, A_USER, A_PASSWORD, A_VOLUME, A_CACHETIME, A_TEMPDIR, A_KEEPDIR,
-	A_CAFILE, A_CAPATH, A_INSECURE, A_PROXY, A_TIMEOUT, A_CHUNKSIZE,
-	A_READONLY, A_NOPASSWORDREQ, A_CHARSET, A_DEBUG, A_COUNT
+	A_VOLUME, A_CONFIGDIR, A_CACHETIME, A_TIMEOUT, A_CHUNKSIZE, A_TEMPDIR,
+	A_KEEPDIR, A_CAPATH, A_PROXY, A_NOICONS, A_READONLY, A_CHARSET, A_DEBUG,
+	A_COUNT
 };
 
 static struct {
-	char         device[64];
-	char         volume[128];
-	char         display[130];
-	char         url[512];
-	char         user[128];
-	char         password[256];
-	int          have_password;
-	int          ask_password;
-	int          cancelled;  /* the password requester was cancelled */
-	int          reported;   /* a connection problem was shown */
-	int          readonly;
-	int          convert;   /* names arrive in the local character set */
-	int          cs;        /* that character set */
-	dav_config   dc;
-	ncfs_options fo;
-	dav_session *dav;
-	ncfs        *fs;
-	int          connected;
-	int64_t      last_try;
-	int          last_err;
+	char           device[64];
+	char           volume[128];
+	char           display[130];
+	char           config_dir[256];
+	char           save_dir[256];
+	char           tempdir[256];
+	char           keepdir[256];
+	char           capath[256];
+	char           proxy[256];
+	int            readonly;
+	int            convert;   /* names arrive in the local character set */
+	int            cs;        /* that character set */
+	ncroot_options ro;
+	ncroot        *root;
 } g;
 
 static void strip_quotes(char *s)
@@ -154,141 +155,14 @@ static void strip_quotes(char *s)
 	}
 }
 
-static char *dupstr(const char *s)
+/* A Startup line of version 0.37 or older names one server ("URL=...").
+ * Those settings now live in the server list. */
+static int old_startup(const char *s)
 {
-	return s != NULL ? strdup(s) : NULL;
-}
-
-/* ENV:NextcloudHandler/<device>.auth, then ENVARC: */
-static int load_password(void)
-{
-	static const char *dirs[] = { "ENV:", "ENVARC:" };
-	char path[256];
-	int i;
-
-	for (i = 0; i < 2; i++) {
-		FILE *f;
-
-		snprintf(path, sizeof(path), "%sNextcloudHandler/%s.auth", dirs[i], g.device);
-		f = fopen(path, "r");
-		if (f == NULL)
-			continue;
-		if (fgets(g.password, sizeof(g.password), f) != NULL) {
-			g.password[strcspn(g.password, "\r\n")] = '\0';
-			fclose(f);
-			return g.password[0] != '\0';
-		}
-		fclose(f);
-	}
+	for (; *s != '\0'; s++)
+		if (strncasecmp(s, "URL=", 4) == 0 && (s[-1] == ' ' || s[-1] == '"' || s[-1] == '\t'))
+			return 1;
 	return 0;
-}
-
-static void save_password(void)
-{
-	static const char *dirs[] = { "ENVARC:", "ENV:" };
-	char path[256];
-	int i;
-
-	for (i = 0; i < 2; i++) {
-		FILE *f;
-
-		snprintf(path, sizeof(path), "%sNextcloudHandler", dirs[i]);
-		mkdir(path, 0700);
-		snprintf(path, sizeof(path), "%sNextcloudHandler/%s.auth", dirs[i], g.device);
-		f = fopen(path, "w");
-		if (f == NULL) {
-			plat_log(LOG_ERR, "cannot save the password in %s\n", path);
-			continue;
-		}
-		fprintf(f, "%s\n", g.password);
-		fclose(f);
-	}
-}
-
-static void report_problem(void)
-{
-	char msg[1200], title[128];
-	const char *hint;
-	long status = dav_last_status(g.dav);
-
-	if (dav_last_kind(g.dav) == DAV_FAIL_TLS)
-		hint = "The server's certificate could not be checked. If the server\n"
-		       "uses a certificate of its own, give it with CAFILE in the\n"
-		       "DOSDriver; otherwise check that AmiSSL:Certs is up to date.";
-	else if (status == 401 || status == 403)
-		hint = "The server did not accept the user name or password.";
-	else
-		hint = "Check the URL in the DOSDriver.";
-	snprintf(msg, sizeof(msg), "Cannot use %s\n%s\n\n%s\n\n"
-	         "See NextcloudHandler.guide. The volume shows \"no disk\"\n"
-	         "until this is fixed and DiskChange %s: is used.",
-	         g.url, dav_error(g.dav), hint, g.device);
-	snprintf(title, sizeof(title), "%s: %s", g.device, NCH_VERS);
-	plat_report(title, msg);
-}
-
-/* Connects on first use, so that the volume can be mounted at boot before
- * the network is up. Returns 0 or -errno. */
-static int online(void)
-{
-	const char *problem = NULL;
-	int tries, err = -ENODEV, remember = 0;
-
-	if (g.connected)
-		return 0;
-	if (g.last_try != 0 && plat_ms() - g.last_try < RETRY_MS)
-		return g.last_err;
-
-	for (tries = 0; tries < 3; tries++) {
-		if (!g.have_password && g.user[0] != '\0') {
-			if (!g.ask_password || g.cancelled) {
-				err = -EACCES;
-				goto fail;
-			}
-			if (!req_password(g.device, g.user, g.url, problem, g.password,
-			                  sizeof(g.password), &remember)) {
-				/* Workbench looks at the volume all the time: do not ask
-				 * again until "DiskChange" or a new mount */
-				g.cancelled = 1;
-				err = -EACCES;
-				goto fail;
-			}
-			g.have_password = 1;
-		}
-		dav_set_password(g.dav, g.password);
-		err = dav_connect(g.dav);
-		if (err == 0) {
-			/* saved only once the server has accepted it */
-			if (remember)
-				save_password();
-			g.connected = 1;
-			g.reported = 0;
-			g.last_try = 0;
-			g.last_err = 0;
-			return 0;
-		}
-		if (dav_last_status(g.dav) == 401 && g.ask_password) {
-			/* wrong password: ask again */
-			g.have_password = 0;
-			problem = "The server did not accept the password.";
-			continue;
-		}
-		break;
-	}
-	/* Network trouble may pass (the volume is often mounted before the
-	 * network is up), so it only gives "no disk". Anything else needs the
-	 * user: say it once, until "DiskChange" or a new mount. */
-	if (dav_last_kind(g.dav) != DAV_FAIL_NETWORK && !g.reported) {
-		g.reported = 1;
-		report_problem();
-	}
-fail:
-	g.last_try = plat_ms();
-	/* AmigaDOS shows "no disk": the volume is there but not reachable or
-	 * not logged in; the next access tries again */
-	g.last_err = -ENODEV;
-	plat_log(LOG_ERR, "cannot connect to %s: %s\n", g.url, dav_error(g.dav));
-	return g.last_err;
 }
 
 /* ------------------------------------------------------------------------
@@ -350,6 +224,7 @@ static int logret(struct rpc *r, int err)
 	return err;
 }
 
+
 static int get_comment(const char *path, char *buf, uint32 size)
 {
 	char tmp[512];
@@ -357,8 +232,8 @@ static int get_comment(const char *path, char *buf, uint32 size)
 	int n;
 
 	if (!g.convert)
-		return ncfs_getcomment(g.fs, path, buf, size);
-	n = ncfs_getcomment(g.fs, path, tmp, sizeof(tmp) - 1);
+		return ncroot_getcomment(g.root, path, buf, size);
+	n = ncroot_getcomment(g.root, path, tmp, sizeof(tmp) - 1);
 	if (n < 0)
 		return n;
 	tmp[n] = '\0';
@@ -391,27 +266,16 @@ void rpc_serve(struct rpc *r)
 
 	switch (r->op) {
 	case OP_GETATTR:
-		err = online();
-		if (err != 0 && r->path != NULL && strcmp(r->path, "/") == 0) {
-			/* filesysbox only creates the volume when the root can be
-			 * examined: show an empty root while the server is away */
-			memset(&r->st, 0, sizeof(r->st));
-			r->st.is_dir = 1;
-			err = 0;
-		} else if (err == 0) {
-			err = ncfs_getattr(g.fs, r->path, &r->st);
-		}
+		err = ncroot_getattr(g.root, r->path, &r->st);
 		break;
 	case OP_FGETATTR:
-		err = ncfs_fgetattr(g.fs, r->fh, &r->st);
+		err = ncroot_fgetattr(g.root, r->fh, &r->st);
 		break;
 	case OP_READDIR: {
 		struct dirbuf d;
 
 		memset(&d, 0, sizeof(d));
-		err = online();
-		if (err == 0)
-			err = ncfs_readdir(g.fs, r->path, dir_add, &d);
+		err = ncroot_readdir(g.root, r->path, dir_add, &d);
 		if (err == 0 && d.failed)
 			err = -ENOMEM;
 		if (err != 0 || d.len == 0) {
@@ -423,81 +287,57 @@ void rpc_serve(struct rpc *r)
 		break;
 	}
 	case OP_OPEN:
-		err = online();
-		if (err == 0)
-			err = ncfs_open(g.fs, r->path, 0, &r->fh);
+		err = ncroot_open(g.root, r->path, 0, &r->fh);
 		break;
 	case OP_CREATE:
-		err = online();
-		if (err == 0)
-			err = ncfs_create(g.fs, r->path, &r->fh);
+		err = ncroot_create(g.root, r->path, &r->fh);
 		break;
 	case OP_READ:
-		err = ncfs_read(g.fs, r->fh, r->buf, r->size, r->off);
+		err = ncroot_read(g.root, r->fh, r->buf, r->size, r->off);
 		break;
 	case OP_WRITE:
-		err = ncfs_write(g.fs, r->fh, r->cbuf, r->size, r->off);
+		err = ncroot_write(g.root, r->fh, r->cbuf, r->size, r->off);
 		break;
 	case OP_FLUSH:
-		err = ncfs_flush(g.fs, r->fh);
+		err = ncroot_flush(g.root, r->fh);
 		break;
 	case OP_RELEASE:
-		err = ncfs_release(g.fs, r->fh);
+		err = ncroot_release(g.root, r->fh);
 		break;
 	case OP_TRUNCATE:
-		err = online();
-		if (err == 0)
-			err = ncfs_truncate(g.fs, r->path, r->off);
+		err = ncroot_truncate(g.root, r->path, r->off);
 		break;
 	case OP_FTRUNCATE:
-		err = ncfs_ftruncate(g.fs, r->fh, r->off);
+		err = ncroot_ftruncate(g.root, r->fh, r->off);
 		break;
 	case OP_MKDIR:
-		err = online();
-		if (err == 0)
-			err = ncfs_mkdir(g.fs, r->path);
+		err = ncroot_mkdir(g.root, r->path);
 		break;
 	case OP_UNLINK:
-		err = online();
-		if (err == 0)
-			err = ncfs_unlink(g.fs, r->path);
+		err = ncroot_unlink(g.root, r->path);
 		break;
 	case OP_RMDIR:
-		err = online();
-		if (err == 0)
-			err = ncfs_rmdir(g.fs, r->path);
+		err = ncroot_rmdir(g.root, r->path);
 		break;
 	case OP_RENAME:
-		err = online();
-		if (err == 0)
-			err = ncfs_rename(g.fs, r->path, r->path2);
+		err = ncroot_rename(g.root, r->path, r->path2);
 		break;
 	case OP_UTIMENS:
-		err = online();
-		if (err == 0)
-			err = ncfs_utimens(g.fs, r->path, r->mtime);
+		err = ncroot_utimens(g.root, r->path, r->mtime);
 		break;
 	case OP_STATFS:
 		r->total = 0;
 		r->avail = 0;
-		err = online();
-		if (err == 0)
-			err = ncfs_statfs(g.fs, &r->total, &r->avail);
+		err = ncroot_statfs(g.root, r->path, &r->total, &r->avail);
 		break;
 	case OP_GETCOMMENT:
-		err = online();
-		if (err == 0)
-			err = get_comment(r->path, r->buf, r->size);
+		err = get_comment(r->path, r->buf, r->size);
 		break;
 	case OP_SETCOMMENT:
-		err = online();
-		if (err == 0)
-			err = ncfs_setcomment(g.fs, r->path, r->cbuf);
+		err = ncroot_setcomment(g.root, r->path, r->cbuf);
 		break;
 	case OP_RESET:
-		g.cancelled = 0;
-		g.reported = 0;
-		g.last_try = 0;
+		ncroot_reset(g.root);
 		err = 0;
 		break;
 	default:
@@ -597,9 +437,8 @@ static int handler_main(struct DosPacket *pkt)
 	char *argbuf = NULL;
 	int32 args[A_COUNT];
 	const char *startup = "";
-	char *capath_default = NULL;
 	int32 err;
-	int seg_taken;
+	int seg_taken, noicons;
 
 	seg_taken = take_seglist(dn);
 	memset(args, 0, sizeof(args));
@@ -609,6 +448,20 @@ static int handler_main(struct DosPacket *pkt)
 		startup = (const char *)BADDR(dn->dn_Startup) + 1;
 	dn->dn_Startup = ZERO;
 
+	if (old_startup(startup)) {
+		char msg[900];
+		snprintf(msg, sizeof(msg),
+		         "The DOSDriver %s: was made for nextcloud-handler 0.37\n"
+		         "or older: its Startup line names one server (URL=...).\n\n"
+		         "nextcloud-handler now shows all your servers in one device,\n"
+		         "NCH:. Start SYS:Prefs/nchprefs: it takes the server over from\n"
+		         "this DOSDriver. Then delete the DOSDriver %s and mount\n"
+		         "DEVS:DOSDrivers/NCH instead. See NextcloudHandler.guide.",
+		         g.device, g.device);
+		req_message(NCH_VERS, msg);
+		err = ERROR_REQUIRED_ARG_MISSING;
+		goto fail;
+	}
 	err = read_startup(startup, args, &rda, &argbuf);
 	if (err != 0) {
 		char msg[400];
@@ -622,48 +475,49 @@ static int handler_main(struct DosPacket *pkt)
 	if (args[A_DEBUG])
 		plat_loglevel = LOG_DEBUG;
 	plat_log(LOG_DEBUG, "code %s\n", seg_taken ? "freed when the handler ends" : "kept by DOS");
-	snprintf(g.url, sizeof(g.url), "%s", (const char *)args[A_URL]);
-	if (args[A_USER])
-		snprintf(g.user, sizeof(g.user), "%s", (const char *)args[A_USER]);
-	if (args[A_PASSWORD]) {
-		snprintf(g.password, sizeof(g.password), "%s", (const char *)args[A_PASSWORD]);
-		g.have_password = 1;
-	} else {
-		g.have_password = load_password();
-	}
-	g.ask_password = !args[A_NOPASSWORDREQ];
-	g.cs = cs_from_name(args[A_CHARSET] ? (const char *)args[A_CHARSET] : getenv("CHARSET"));
+	g.cs = os4_charset(args[A_CHARSET] ? (const char *)args[A_CHARSET] : NULL);
 	g.readonly = args[A_READONLY] != 0;
+	noicons = args[A_NOICONS] != 0;
 	snprintf(g.volume, sizeof(g.volume), "%s",
 	         args[A_VOLUME] ? (const char *)args[A_VOLUME] : "Nextcloud");
-
-	g.dc.url = g.url;
-	g.dc.user = g.user[0] != '\0' ? g.user : NULL;
-	g.dc.password = g.password;
-	g.dc.insecure = args[A_INSECURE] != 0;
-	g.dc.ca_file = dupstr((const char *)args[A_CAFILE]);
-	g.dc.ca_path = dupstr((const char *)args[A_CAPATH]);
-	if (g.dc.ca_file == NULL && g.dc.ca_path == NULL) {
+	if (args[A_CONFIGDIR]) {
+		/* a drawer of its own: ENV: and ENVARC: copies do not apply */
+		snprintf(g.config_dir, sizeof(g.config_dir), "%s", (const char *)args[A_CONFIGDIR]);
+	} else {
+		snprintf(g.config_dir, sizeof(g.config_dir), "ENV:%s", CFG_DIR);
+		snprintf(g.save_dir, sizeof(g.save_dir), "ENVARC:%s", CFG_DIR);
+	}
+	snprintf(g.tempdir, sizeof(g.tempdir), "%s", args[A_TEMPDIR] ? (const char *)args[A_TEMPDIR] : "T:");
+	snprintf(g.keepdir, sizeof(g.keepdir), "%s", args[A_KEEPDIR] ? (const char *)args[A_KEEPDIR] : g.tempdir);
+	if (args[A_CAPATH]) {
+		snprintf(g.capath, sizeof(g.capath), "%s", (const char *)args[A_CAPATH]);
+	} else {
 		/* AmiSSL keeps the trusted root certificates in this folder */
 		BPTR l = IDOS->Lock("AmiSSL:Certs", SHARED_LOCK);
 		if (l != ZERO) {
 			IDOS->UnLock(l);
-			capath_default = strdup("AmiSSL:Certs");
-			g.dc.ca_path = capath_default;
+			snprintf(g.capath, sizeof(g.capath), "AmiSSL:Certs");
 		}
 	}
-	g.dc.proxy = dupstr((const char *)args[A_PROXY]);
-	g.dc.connect_timeout = 20;
-	g.dc.io_timeout = args[A_TIMEOUT] ? *(int32 *)args[A_TIMEOUT] : 60;
-	g.dc.chunk_size = args[A_CHUNKSIZE] ? (int64_t)*(int32 *)args[A_CHUNKSIZE] * 1024 * 1024 : 0;
-	g.dc.user_agent = NCH_VERS " (AmigaOS 4)";
-
-	g.fo.tempdir = dupstr(args[A_TEMPDIR] ? (const char *)args[A_TEMPDIR] : "T:");
-	g.fo.keepdir = dupstr(args[A_KEEPDIR] ? (const char *)args[A_KEEPDIR] : g.fo.tempdir);
-	g.fo.cache_ms = args[A_CACHETIME] ? *(int32 *)args[A_CACHETIME] * 1000 : 5000;
-	g.fo.readonly = g.readonly;
+	if (args[A_PROXY])
+		snprintf(g.proxy, sizeof(g.proxy), "%s", (const char *)args[A_PROXY]);
 	snprintf(g.display, sizeof(g.display), "%s:", g.volume);
-	g.fo.display = g.display;
+
+	memset(&g.ro, 0, sizeof(g.ro));
+	g.ro.config_dir = g.config_dir;
+	g.ro.save_dir = g.save_dir[0] != '\0' ? g.save_dir : NULL;
+	g.ro.icon_file = noicons ? NULL : "ENV:Sys/def_drawer.info";
+	g.ro.tempdir = g.tempdir;
+	g.ro.keepdir = g.keepdir;
+	g.ro.display = g.display;
+	g.ro.ca_path = g.capath[0] != '\0' ? g.capath : NULL;
+	g.ro.proxy = g.proxy[0] != '\0' ? g.proxy : NULL;
+	g.ro.user_agent = NCH_VERS " (AmigaOS 4)";
+	g.ro.cache_ms = args[A_CACHETIME] ? *(int32 *)args[A_CACHETIME] * 1000 : 5000;
+	g.ro.connect_timeout = 20;
+	g.ro.io_timeout = args[A_TIMEOUT] ? *(int32 *)args[A_TIMEOUT] : 60;
+	g.ro.chunk_size = args[A_CHUNKSIZE] ? (int64_t)*(int32 *)args[A_CHUNKSIZE] * 1024 * 1024 : 0;
+	g.ro.readonly = g.readonly;
 
 	IDOS->FreeArgs(rda);
 	IDOS->FreeDosObject(DOS_RDARGS, rda);
@@ -679,13 +533,14 @@ static int handler_main(struct DosPacket *pkt)
 		goto fail;
 	}
 
-	g.dav = dav_new(&g.dc);
-	g.fs = g.dav != NULL ? ncfs_new(g.dav, &g.fo) : NULL;
-	if (g.fs == NULL) {
+	/* requester texts are always in the local character set */
+	plat_charset = g.cs;
+	g.root = ncroot_new(&g.ro);
+	if (g.root == NULL) {
 		err = ERROR_NO_FREE_STORE;
 		goto fail;
 	}
-	plat_log(LOG_INFO, "%s: %s, user %s\n", g.device, g.url, g.user);
+	plat_log(LOG_INFO, "%s: servers from %s/%s\n", g.device, g.config_dir, CFG_SERVERS);
 
 	if (fbx_start(pkt, g.device, g.volume, g.readonly) != 0) {
 		req_message(NCH_VERS, "This handler needs filesysbox.library 54.8 or newer.");
@@ -698,9 +553,9 @@ static int handler_main(struct DosPacket *pkt)
 	 * process keeps the handler priority. */
 	IExec->SetTaskPri(IExec->FindTask(NULL), -1);
 	g.convert = !fbx_utf8_names;
-	plat_charset = g.cs; /* requester texts are always in the local set */
-	plat_log(LOG_INFO, "file names: %s\n", g.convert ?
-	         "converted by the handler" : "converted by filesysbox");
+	plat_log(LOG_INFO, "file names: %s (%s)\n", g.convert ?
+	         "converted by the handler" : "converted by filesysbox",
+	         g.cs == CS_ISO_8859_15 ? "ISO-8859-15" : "ISO-8859-1");
 	serve_requests();
 	fbx_wait(); /* its code goes away with ours */
 	err = 0;
@@ -713,14 +568,8 @@ fail:
 		IDOS->FreeDosObject(DOS_RDARGS, rda);
 	}
 	free(argbuf);
-	ncfs_free(g.fs);
-	dav_free(g.dav);
-	free((char *)g.dc.ca_file);
-	free(capath_default != NULL ? capath_default : (char *)g.dc.ca_path);
-	free((char *)g.dc.proxy);
-	free((char *)g.fo.tempdir);
-	free((char *)g.fo.keepdir);
-	memset(g.password, 0, sizeof(g.password));
+	ncroot_free(g.root);
+	g.root = NULL;
 	fbx_stop();
 	amissl_close();
 	req_close_libs();

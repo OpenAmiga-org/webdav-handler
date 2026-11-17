@@ -15,14 +15,17 @@ texttype: Plain text
 distribute: yes
 hend:
 
-nextcloud-handler shows the files of a Nextcloud account as a volume on
-AmigaOS 4, for example Nextcloud: on Workbench. Files can be opened,
-copied, renamed, deleted and saved directly on the server, from Workbench,
-the Shell and any program. It also works with ownCloud and other WebDAV
-servers.
+nextcloud-handler shows your Nextcloud accounts on one volume on AmigaOS 4,
+Nextcloud: (device NCH:). Every server you add with the prefs program
+nchprefs is a drawer in it, connected when the drawer is first opened.
+Files can be opened, copied, renamed, deleted and saved directly on the
+server, from Workbench, the Shell and any program. It also works with
+ownCloud and other WebDAV servers.
 
 Features:
 
+- Any number of servers in one device, set up with the prefs program
+  nchprefs ("Test connection" button included).
 - Encrypted connections (https) through AmiSSL, with certificate check.
 - Files of any size; big files are uploaded in parts (Nextcloud chunked
   upload), so server limits on request size do not matter.
@@ -34,8 +37,8 @@ Features:
 - Free space from the Nextcloud quota.
 - The password can be asked for with a requester and remembered; use an
   app password from the Nextcloud security settings.
-- The volume can be mounted at boot: it connects on first use and
-  reconnects by itself after network problems.
+- The volume can be mounted at boot: a server is connected on first use,
+  and reconnected by itself after network problems.
 - A failed upload is reported with a requester, and the data is kept
   locally, so nothing is lost.
 
@@ -54,12 +57,23 @@ Requirements (install these first):
 Installation:
 
 Double-click the Install icon. It checks the requirements, copies the
-handler to L:, creates a DOSDriver with your server address and user name
-and can mount the volume right away. Everything else is described in
-NextcloudHandler.guide.
+handler to L: and nchprefs to SYS:Prefs, installs the DOSDriver NCH,
+mounts it and starts nchprefs to add your servers. Everything else is
+described in NextcloudHandler.guide.
+
+Upgrading from 0.37 or older: those versions had one DOSDriver per server
+(NC0:, NC1:, ...). nchprefs takes their servers over the first time it
+starts and offers to delete the old DOSDrivers.
 
 History:
 
+- 0.39 (2026-11-17): one device, NCH:, for all servers: every server is
+  a drawer, connected when it is first used. The new prefs program nchprefs
+  keeps the server list (with "Test connection") and takes over the
+  servers of the old DOSDrivers. Remembered passwords go into the server
+  list. The character set of file names comes from ENV:Charset when
+  CHARSET is not given. Long server messages are broken into lines in
+  requesters.
 - 0.37 (2026-11-15): converting an empty text between the Amiga character
   set and UTF-8 could give leftover memory instead of an empty text (no
   case is known where the handler showed it).

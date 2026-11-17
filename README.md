@@ -1,19 +1,25 @@
 # nextcloud-handler
 
-An AmigaOS 4 filesystem handler that mounts a Nextcloud account (or another
-WebDAV server) as a volume, for example `Nextcloud:`. Built on
-filesysbox.library, clib4, libcurl and AmiSSL.
+An AmigaOS 4 filesystem handler that shows Nextcloud accounts (and other
+WebDAV servers) on one volume, `Nextcloud:` (device `NCH:`): every server
+in the server list is a drawer, connected when it is first used. The
+server list (`ENV:NextcloudHandler/servers.xml`) is kept by the prefs
+program `nchprefs`. Built on filesysbox.library, clib4, libcurl and AmiSSL.
 
 End-user documentation: `package/NextcloudHandler/NextcloudHandler.guide`.
 Release archive: `tools/make_lha.sh` -> `dist/NextcloudHandler.lha`.
 
 ## Layout
 
-- `src/core/`   WebDAV client, cache, file logic, charset conversion (portable C)
+- `src/core/`   WebDAV client, cache, file logic, charset conversion, the
+                server list (`servers.c`) and the root of servers
+                (`ncroot.c`) (portable C)
 - `src/os4/`    AmigaOS 4 handler: startup, worker process, filesysbox glue,
                 AmiSSL, requesters
+- `src/prefs/`  nchprefs, the prefs program (ReAction, clib4)
 - `src/linux/`  Linux FUSE build of the same core, for fast tests
-- `tests/`      `run_tests.py` (Linux build against the Docker server),
+- `tests/`      `run_tests.py` (Linux build against the Docker server, with a
+                server list of several servers),
                 `unit_charset.c`, `os4/` (guest scripts and test tools)
 - `testserver/` throwaway Nextcloud in Docker (`setup.sh`, `reset.sh`)
 - `package/`    files of the release archive (guide, Install script, DOSDriver,
@@ -27,7 +33,7 @@ Release archive: `tools/make_lha.sh` -> `dist/NextcloudHandler.lha`.
     make unit                      # unit tests (charset)
     make test                      # ... unit tests and the tests against testserver/
     tools/build_curl_amissl.sh     # once: curl headers (its library is not linked)
-    tools/build_os4.sh             # AmigaOS 4 handler (walkero/amigagccondocker)
+    tools/build_os4.sh             # AmigaOS 4 handler and nchprefs (walkero/amigagccondocker)
     tools/make_lha.sh              # release archive
 
 The OS4 build needs the cross-compiler image
@@ -35,6 +41,13 @@ The OS4 build needs the cross-compiler image
 
 ## Design notes
 
+- The root lists the servers of `servers.xml` without connecting
+  (`src/core/ncroot.c`, the same design as sftp-handler's sites). Each
+  server gets its own WebDAV session and cache (`ncfs`) when its folder is
+  first used; the list is read again when the file changes (checked at
+  most once a second), and a server whose settings changed is kept for its
+  open files until they are closed. The root and the server folders are
+  read-only; a rename from one server to another gives EXDEV.
 - filesysbox.library calls the filesystem callbacks in its own process and,
   on AmigaOS 4, in the tasks of the programs using the volume. clib4, curl
   and the sockets only work in the handler process, so the callbacks

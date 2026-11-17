@@ -2,6 +2,7 @@
 # Cross-compiles the AmigaOS 4 parts in the walkero/amigagccondocker image.
 #
 #   tools/build_os4.sh            handler   -> build/os4/nextcloud-handler
+#                                 and prefs -> build/os4/nchprefs
 #   tools/build_os4.sh curltest   test tool -> build/os4/curltest
 #
 # Every handler build raises NCH_REVISION in src/os4/version.h and sets
@@ -21,7 +22,9 @@ fi
 
 mkdir -p "$ROOT/build/os4"
 docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT":/src -w /src "$IMAGE" \
-	make -f tools/os4.mk "$WHAT" < /dev/null
+	make -f tools/os4.mk "$WHAT" $([ "$WHAT" = handler ] && echo prefs) < /dev/null
 if [ "$WHAT" = handler ]; then
-	strings "$ROOT/build/os4/nextcloud-handler" | grep -m1 "^\$VER"
+	# (no pipe: with pipefail, strings | grep -m1 fails on SIGPIPE)
+	LC_ALL=C grep -a -o -m1 '\$VER: [[:print:]]*' "$ROOT/build/os4/nextcloud-handler"
+	LC_ALL=C grep -a -o -m1 '\$VER: [[:print:]]*' "$ROOT/build/os4/nchprefs"
 fi

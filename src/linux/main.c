@@ -2,9 +2,10 @@
  * core quickly against a real server. It is not part of the AmigaOS
  * release. Public domain.
  *
- *   nextcloud-fuse --url URL --user NAME [options] MOUNTPOINT [fuse options]
+ *   nextcloud-fuse --config DIR [options] MOUNTPOINT [fuse options]
  *
- * The password comes from the environment variable NCH_PASSWORD.
+ * DIR holds servers.xml (the server list, as made by nchprefs). The root
+ * of the mount lists the servers; see src/core/ncroot.h.
  */
 #define FUSE_USE_VERSION 31
 #include <fuse3/fuse.h>
@@ -17,16 +18,16 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "ncfs.h"
+#include "ncroot.h"
 #include "platform.h"
 
 #define COMMENT_XATTR "user.amiga_comment"
 
-static ncfs *g_fs;
+static ncroot *g_fs;
 
-static ncfs_file *FH(struct fuse_file_info *fi)
+static ncroot_file *FH(struct fuse_file_info *fi)
 {
-	return fi != NULL ? (ncfs_file *)(uintptr_t)fi->fh : NULL;
+	return fi != NULL ? (ncroot_file *)(uintptr_t)fi->fh : NULL;
 }
 
 static void fill_stat(const ncfs_stat *ns, struct stat *st)
@@ -52,7 +53,7 @@ static void fill_stat(const ncfs_stat *ns, struct stat *st)
 static int op_getattr(const char *path, struct stat *st, struct fuse_file_info *fi)
 {
 	ncfs_stat ns;
-	int err = FH(fi) != NULL ? ncfs_fgetattr(g_fs, FH(fi), &ns) : ncfs_getattr(g_fs, path, &ns);
+	int err = FH(fi) != NULL ? ncroot_fgetattr(g_fs, FH(fi), &ns) : ncroot_getattr(g_fs, path, &ns);
 
 	if (err == 0)
 		fill_stat(&ns, st);
@@ -83,13 +84,13 @@ static int op_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t
 	(void)flags;
 	filler(buf, ".", NULL, 0, 0);
 	filler(buf, "..", NULL, 0, 0);
-	return ncfs_readdir(g_fs, path, fill_one, &c);
+	return ncroot_readdir(g_fs, path, fill_one, &c);
 }
 
 static int op_open(const char *path, struct fuse_file_info *fi)
 {
-	ncfs_file *f;
-	int err = ncfs_open(g_fs, path, (fi->flags & O_TRUNC) != 0, &f);
+	ncroot_file *f;
+	int err = ncroot_open(g_fs, path, (fi->flags & O_TRUNC) != 0, &f);
 
 	if (err == 0)
 		fi->fh = (uint64_t)(uintptr_t)f;
@@ -98,11 +99,11 @@ static int op_open(const char *path, struct fuse_file_info *fi)
 
 static int op_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-	ncfs_file *f;
+	ncroot_file *f;
 	int err;
 
 	(void)mode;
-	err = ncfs_create(g_fs, path, &f);
+	err = ncroot_create(g_fs, path, &f);
 	if (err == 0)
 		fi->fh = (uint64_t)(uintptr_t)f;
 	return err;
@@ -112,14 +113,14 @@ static int op_read(const char *path, char *buf, size_t size, off_t off,
                    struct fuse_file_info *fi)
 {
 	(void)path;
-	return ncfs_read(g_fs, FH(fi), buf, size, off);
+	return ncroot_read(g_fs, FH(fi), buf, size, off);
 }
 
 static int op_write(const char *path, const char *buf, size_t size, off_t off,
                     struct fuse_file_info *fi)
 {
 	(void)path;
-	return ncfs_write(g_fs, FH(fi), buf, size, off);
+	return ncroot_write(g_fs, FH(fi), buf, size, off);
 }
 
 static int op_flush(const char *path, struct fuse_file_info *fi)
@@ -130,53 +131,53 @@ static int op_flush(const char *path, struct fuse_file_info *fi)
 	 * also flushes when a duplicated descriptor is closed (the shell does
 	 * that for "echo >file"), so wait until data was written; release
 	 * uploads the rest. */
-	if (!ncfs_file_written(FH(fi)))
+	if (!ncroot_file_written(FH(fi)))
 		return 0;
-	return ncfs_flush(g_fs, FH(fi));
+	return ncroot_flush(g_fs, FH(fi));
 }
 
 static int op_fsync(const char *path, int datasync, struct fuse_file_info *fi)
 {
 	(void)path;
 	(void)datasync;
-	return ncfs_flush(g_fs, FH(fi));
+	return ncroot_flush(g_fs, FH(fi));
 }
 
 static int op_release(const char *path, struct fuse_file_info *fi)
 {
 	(void)path;
-	ncfs_release(g_fs, FH(fi));
+	ncroot_release(g_fs, FH(fi));
 	return 0;
 }
 
 static int op_truncate(const char *path, off_t size, struct fuse_file_info *fi)
 {
 	if (FH(fi) != NULL)
-		return ncfs_ftruncate(g_fs, FH(fi), size);
-	return ncfs_truncate(g_fs, path, size);
+		return ncroot_ftruncate(g_fs, FH(fi), size);
+	return ncroot_truncate(g_fs, path, size);
 }
 
 static int op_mkdir(const char *path, mode_t mode)
 {
 	(void)mode;
-	return ncfs_mkdir(g_fs, path);
+	return ncroot_mkdir(g_fs, path);
 }
 
 static int op_unlink(const char *path)
 {
-	return ncfs_unlink(g_fs, path);
+	return ncroot_unlink(g_fs, path);
 }
 
 static int op_rmdir(const char *path)
 {
-	return ncfs_rmdir(g_fs, path);
+	return ncroot_rmdir(g_fs, path);
 }
 
 static int op_rename(const char *from, const char *to, unsigned int flags)
 {
 	if (flags & RENAME_EXCHANGE)
 		return -EINVAL;
-	return ncfs_rename(g_fs, from, to);
+	return ncroot_rename(g_fs, from, to);
 }
 
 static int op_utimens(const char *path, const struct timespec tv[2],
@@ -191,7 +192,7 @@ static int op_utimens(const char *path, const struct timespec tv[2],
 		return 0;
 	else
 		mtime = tv[1].tv_sec;
-	return ncfs_utimens(g_fs, path, mtime);
+	return ncroot_utimens(g_fs, path, mtime);
 }
 
 static int op_statfs(const char *path, struct statvfs *sv)
@@ -199,8 +200,7 @@ static int op_statfs(const char *path, struct statvfs *sv)
 	int64_t total, avail;
 	int err;
 
-	(void)path;
-	err = ncfs_statfs(g_fs, &total, &avail);
+	err = ncroot_statfs(g_fs, path, &total, &avail);
 	if (err != 0)
 		return err;
 	memset(sv, 0, sizeof(*sv));
@@ -217,7 +217,7 @@ static int op_getxattr(const char *path, const char *name, char *value, size_t s
 {
 	if (strcmp(name, COMMENT_XATTR) != 0)
 		return -ENODATA;
-	return ncfs_getcomment(g_fs, path, value, size);
+	return ncroot_getcomment(g_fs, path, value, size);
 }
 
 static int op_setxattr(const char *path, const char *name, const char *value,
@@ -232,14 +232,14 @@ static int op_setxattr(const char *path, const char *name, const char *value,
 		return -E2BIG;
 	memcpy(buf, value, size);
 	buf[size] = '\0';
-	return ncfs_setcomment(g_fs, path, buf);
+	return ncroot_setcomment(g_fs, path, buf);
 }
 
 static int op_removexattr(const char *path, const char *name)
 {
 	if (strcmp(name, COMMENT_XATTR) != 0)
 		return -ENODATA;
-	return ncfs_setcomment(g_fs, path, NULL);
+	return ncroot_setcomment(g_fs, path, NULL);
 }
 
 static void *op_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
@@ -278,26 +278,23 @@ static const struct fuse_operations ops = {
 static void usage(void)
 {
 	fprintf(stderr,
-	        "usage: nextcloud-fuse --url URL [--user NAME] [--cafile FILE] [--insecure]\n"
-	        "         [--cache-ms N] [--tempdir DIR] [--keepdir DIR] [--debug]\n"
-	        "         MOUNTPOINT [fuse options]\n"
-	        "The password is read from the environment variable NCH_PASSWORD.\n");
+	        "usage: nextcloud-fuse --config DIR [--save-dir DIR] [--icon FILE]\n"
+	        "         [--capath DIR] [--cache-ms N] [--tempdir DIR] [--keepdir DIR]\n"
+	        "         [--readonly] [--verbose] [--debug] MOUNTPOINT [fuse options]\n"
+	        "DIR holds servers.xml, the server list.\n");
 }
 
 int main(int argc, char **argv)
 {
-	dav_config dc;
-	ncfs_options fo;
-	dav_session *dav;
+	ncroot_options ro;
 	char *fargv[64];
-	int fargc = 0, i, err, rc;
+	int fargc = 0, i, rc;
 
-	memset(&dc, 0, sizeof(dc));
-	memset(&fo, 0, sizeof(fo));
-	dc.password = getenv("NCH_PASSWORD");
-	dc.user_agent = "nextcloud-handler-test (Linux)";
-	fo.tempdir = "/tmp";
-	fo.keepdir = "/tmp/nch-kept";
+	memset(&ro, 0, sizeof(ro));
+	ro.user_agent = "nextcloud-handler-test (Linux)";
+	ro.tempdir = "/tmp";
+	ro.keepdir = "/tmp/nch-kept";
+	ro.display = "Nextcloud:";
 
 	fargv[fargc++] = argv[0];
 	fargv[fargc++] = "-s"; /* the core is single-threaded, like filesysbox */
@@ -305,38 +302,29 @@ int main(int argc, char **argv)
 		const char *a = argv[i];
 		const char *v = i + 1 < argc ? argv[i + 1] : NULL;
 
-		if (strcmp(a, "--url") == 0 && v) { dc.url = v; i++; }
-		else if (strcmp(a, "--user") == 0 && v) { dc.user = v; i++; }
-		else if (strcmp(a, "--cafile") == 0 && v) { dc.ca_file = v; i++; }
-		else if (strcmp(a, "--insecure") == 0) { dc.insecure = 1; }
-		else if (strcmp(a, "--cache-ms") == 0 && v) { fo.cache_ms = atoi(v); i++; }
-		else if (strcmp(a, "--tempdir") == 0 && v) { fo.tempdir = v; i++; }
-		else if (strcmp(a, "--keepdir") == 0 && v) { fo.keepdir = v; i++; }
-		else if (strcmp(a, "--readonly") == 0) { fo.readonly = 1; }
+		if (strcmp(a, "--config") == 0 && v) { ro.config_dir = v; i++; }
+		else if (strcmp(a, "--save-dir") == 0 && v) { ro.save_dir = v; i++; }
+		else if (strcmp(a, "--icon") == 0 && v) { ro.icon_file = v; i++; }
+		else if (strcmp(a, "--capath") == 0 && v) { ro.ca_path = v; i++; }
+		else if (strcmp(a, "--cache-ms") == 0 && v) { ro.cache_ms = atoi(v); i++; }
+		else if (strcmp(a, "--tempdir") == 0 && v) { ro.tempdir = v; i++; }
+		else if (strcmp(a, "--keepdir") == 0 && v) { ro.keepdir = v; i++; }
+		else if (strcmp(a, "--readonly") == 0) { ro.readonly = 1; }
 		else if (strcmp(a, "--debug") == 0) { plat_loglevel = LOG_DEBUG; }
 		else if (strcmp(a, "--verbose") == 0) { plat_loglevel = LOG_INFO; }
 		else if (fargc < 60) { fargv[fargc++] = argv[i]; }
 	}
 	fargv[fargc] = NULL;
-	if (dc.url == NULL || fargc < 3) {
+	if (ro.config_dir == NULL || fargc < 3) {
 		usage();
 		return 2;
 	}
-
-	dav = dav_new(&dc);
-	if (dav == NULL) {
+	g_fs = ncroot_new(&ro);
+	if (g_fs == NULL) {
 		fprintf(stderr, "out of memory\n");
 		return 1;
 	}
-	err = dav_connect(dav);
-	if (err != 0) {
-		fprintf(stderr, "cannot connect: %s (%s)\n", dav_error(dav), strerror(-err));
-		dav_free(dav);
-		return 1;
-	}
-	g_fs = ncfs_new(dav, &fo);
 	rc = fuse_main(fargc, fargv, &ops, NULL);
-	ncfs_free(g_fs);
-	dav_free(dav);
+	ncroot_free(g_fs);
 	return rc;
 }

@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#include "ncfs.h"
+#include "ncroot.h"
 
 enum {
 	OP_GETATTR = 1,
@@ -54,7 +54,7 @@ struct rpc {
 	int            op;
 	const char    *path;
 	const char    *path2;
-	ncfs_file     *fh;
+	ncroot_file   *fh;
 	char          *buf;       /* read, getcomment */
 	const char    *cbuf;      /* write, setcomment (NUL-terminated) */
 	uint32         size;
