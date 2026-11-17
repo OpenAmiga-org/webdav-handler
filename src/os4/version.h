@@ -3,7 +3,7 @@
 #define WDV_VERSION_H
 
 #define WDV_VERSION  0
-#define WDV_REVISION 41
+#define WDV_REVISION 42
 #define WDV_DATE     "17.11.2026"
 
 #define WDV_STR2(x) #x

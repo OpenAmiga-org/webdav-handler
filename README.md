@@ -74,9 +74,19 @@ The OS4 build needs the cross-compiler image
 - curl's threaded resolver does not work with clib4; the handler resolves
   names itself and passes them with CURLOPT_RESOLVE.
 - The handler links the cross-compiler image's libcurl.a (clib4 sockets,
-  TLS through the AmiSSL stubs): `-mcrt=clib4` searches the SDK's clib4
-  lib directory before any `-L` directory. A curl of our own that calls
+  TLS through AmiSSL): `-mcrt=clib4` searches the SDK's clib4 lib
+  directory before any `-L` directory. A curl of our own that calls
   bsdsocket.library directly needs fixes first (tools/build_curl_amissl.sh).
+- AmiSSL 5 and 6 with one build (as in sftp-handler): no `-lamisslstubs`.
+  `tools/gen_amissl_glue.py` makes a stub for each AmiSSL function in
+  `tools/amissl_functions.txt` (the 234 that libcurl and the handler call)
+  that calls through a table; `src/os4/amissl.c` opens AMISSL_V4xx when
+  amisslmaster is 6 or newer, else AMISSL_V3xx (5.1), and fills the table
+  with the offsets of that interface. AmiSSL 6 (OpenSSL 4) dropped 10 of
+  the functions from its interface (ASN1_STRING_length, X509_get_pubkey,
+  MD5_*, RSA_*, SRP); `src/os4/amissl_compat.c` stands in for them, and for
+  SSL_get0_group_name on AmiSSL 5 before 5.13. `tools/check_amissl_api.py`
+  checks every used function against the 5.1, 5.27 and 6.1 interfaces.
 - filesysbox 54.9 does not convert file names to the local character set,
   so the handler converts Latin-1/ISO-8859-15 <-> UTF-8 itself.
 - Writes go to a temp file and are uploaded on Close (Nextcloud chunked

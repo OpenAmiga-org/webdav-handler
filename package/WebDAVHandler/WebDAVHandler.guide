@@ -1,5 +1,5 @@
 @database WebDAVHandler.guide
-@$VER: WebDAVHandler.guide 0.41 (17.11.2026)
+@$VER: WebDAVHandler.guide 0.42 (17.11.2026)
 @author orgin
 @wordwrap
 @font topaz.font 8
@@ -81,14 +81,16 @@ script checks the versions and tells you if something is missing.
    GitHub:    https://github.com/AmigaLabs/clib4/releases
    Install it with the Install script in the archive.
 
-@{b}AmiSSL 5 or newer@{ub}   (not part of AmigaOS)
+@{b}AmiSSL 5 (5.1 or newer) or AmiSSL 6@{ub}   (not part of AmigaOS)
    Used for the encrypted (https) connection to the server. Many users
    have it already; check that LIBS:amisslmaster.library exists and that
-   "Version LIBS:amisslmaster.library" says 5.0 or newer.
+   "Version LIBS:amisslmaster.library" says 5.1 or newer.
    OS4Depot:  library/misc/amissl.lha
       https://os4depot.net/?function=showfile&file=library/misc/amissl.lha
    GitHub:    https://github.com/jens-maus/amissl/releases
-   AmiSSL 6 works as well (it keeps the AmiSSL 5 libraries).
+   The handler uses AmiSSL 6 when it is installed, else the newest
+   AmiSSL 5 there is. With DEBUG, the debug log names the AmiSSL used
+   ("TLS: ..."); wdvprefs shows it under Test connection.
 
 @{b}A working TCP/IP connection@{ub}
    Roadshow, as included in AmigaOS 4.1.
@@ -546,6 +548,12 @@ time.
 
 @node History "History"
 @{b}History@{ub}
+
+@{b}0.42 (17.11.2026)@{ub}
+   - Works with AmiSSL 6 alone and with every AmiSSL 5 from 5.1 on.
+     Before, it needed AmiSSL 5.27 (older versions were refused, and
+     AmiSSL 6 only helped when AmiSSL 5 was still installed).
+   - wdvprefs' Test connection names the AmiSSL used.
 
 @{b}0.41 (17.11.2026)@{ub}
    - Nextcloud Handler is now WebDAV Handler: webdav-handler, the device

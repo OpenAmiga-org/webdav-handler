@@ -21,6 +21,16 @@ if [ "$WHAT" = handler ] && [ "${WDV_NO_BUMP:-}" = "" ]; then
 fi
 
 mkdir -p "$ROOT/build/os4"
+# the AmiSSL 6 SDK (interface offsets, see tools/gen_amissl_glue.py)
+AMISSL6_VER=6.1
+if [ ! -d "$ROOT/build/deps/amissl6-sdk/AmiSSL" ]; then
+	mkdir -p "$ROOT/build/deps/amissl6-sdk"
+	(cd "$ROOT/build/deps" && gh release download "$AMISSL6_VER" -R jens-maus/amissl \
+		-p "AmiSSL-$AMISSL6_VER-SDK.lha" --clobber && \
+		cd amissl6-sdk && "${LHA:-$HOME/linux_archivers/lha/lha}" xq "../AmiSSL-$AMISSL6_VER-SDK.lha" >/dev/null)
+fi
+# the AmiSSL stubs for AmiSSL 5 and 6
+python3 -I "$ROOT/tools/gen_amissl_glue.py" "$ROOT/build/os4"
 docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT":/src -w /src "$IMAGE" \
 	make -f tools/os4.mk "$WHAT" $([ "$WHAT" = handler ] && echo prefs) < /dev/null
 if [ "$WHAT" = handler ]; then

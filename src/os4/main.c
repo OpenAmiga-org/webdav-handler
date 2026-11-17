@@ -582,12 +582,13 @@ static int handler_main(struct DosPacket *pkt)
 	argbuf = NULL;
 
 	if (amissl_open() != 0) {
-		req_message(WDV_VERS, "This handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
+		req_message(WDV_VERS, "This handler needs AmiSSL 5 or 6 (and a TCP/IP stack).\n"
 		            "AmiSSL: https://github.com/jens-maus/amissl/releases\n"
 		            "or OS4Depot: library/misc/amissl.lha");
 		err = ERROR_INVALID_RESIDENT_LIBRARY;
 		goto fail;
 	}
+	plat_log(LOG_INFO, "TLS: %s (AmiSSL %d interface)\n", amissl_name(), amissl_version());
 
 	/* requester texts are always in the local character set */
 	plat_charset = g.cs;

@@ -12,13 +12,23 @@ STRIP    = ppc-amigaos-strip
 # see that script for why its library is not used.
 CURLDIR  = build/deps/curl-amissl
 AMISSL   = build/deps/amissl-sdk/AmiSSL/Developer
+# AmiSSL 6 SDK: only for the offsets of its interface and the stand-ins
+# (amissl_off_v4.c, src/os4/amissl_compat.c)
+AMISSL6  = build/deps/amissl6-sdk/AmiSSL/Developer
 CFLAGS   = -O2 -g -Wall -Wextra -Werror -std=gnu11 -mcrt=clib4 \
            -Isrc/core -Isrc/os4 -I$(CURLDIR)/include -I$(AMISSL)/include \
            -I$(SDK)/local/common/include -DCURL_STATICLIB
 LDFLAGS  = -mcrt=clib4 -athread=native -L$(CURLDIR)/lib -L$(AMISSL)/lib/AmigaOS4 \
            -L$(SDK)/local/clib4/lib
 OBJCOPY  = ppc-amigaos-objcopy
-LIBS     = -lcurl -lamisslstubs -lz -lexpat -lpthread
+# No -lamisslstubs: its stubs have fixed AmiSSL 5 offsets. The stubs of
+# build/os4/amissl_glue.c (tools/gen_amissl_glue.py, run by
+# tools/build_os4.sh) fit AmiSSL 5 and 6; a function missing from
+# tools/amissl_functions.txt shows up as "undefined reference".
+LIBS     = -lcurl -lz -lexpat -lpthread
+LIBS_STUBS = -lcurl -lamisslstubs -lz -lexpat -lpthread
+AMISSL_OBJ = build/os4/amissl_glue.o build/os4/amissl_off_v3.o build/os4/amissl_off_v4.o \
+             build/os4/amissl_compat.o
 STRIPFLAGS = -R.comment --strip-unneeded-rel-relocs
 
 CORE_SRC = src/core/util.c src/core/charset.c src/core/davxml.c src/core/davclient.c src/core/ncfs.c \
@@ -41,8 +51,20 @@ handler: build/os4/webdav-handler
 build/os4/fbxglue.o: $(GLUE_SRC) $(wildcard src/core/*.h src/os4/*.h)
 	$(CC) $(CFLAGS) $(GLUE_FLAGS) -c -o $@ $(GLUE_SRC)
 
-build/os4/webdav-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(wildcard src/core/*.h src/os4/*.h)
-	$(CC) $(CFLAGS) -o $@.link $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(LDFLAGS) $(LIBS)
+build/os4/amissl_glue.o: build/os4/amissl_glue.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+build/os4/amissl_off_v3.o: build/os4/amissl_off_v3.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+build/os4/amissl_off_v4.o: build/os4/amissl_off_v4.c
+	$(CC) -I$(AMISSL6)/include $(CFLAGS) -c -o $@ $<
+
+build/os4/amissl_compat.o: src/os4/amissl_compat.c
+	$(CC) -I$(AMISSL6)/include $(CFLAGS) -c -o $@ $<
+
+build/os4/webdav-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(AMISSL_OBJ) $(wildcard src/core/*.h src/os4/*.h)
+	$(CC) $(CFLAGS) -o $@.link $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(AMISSL_OBJ) $(LDFLAGS) $(LIBS)
 	# AmigaOS starts a program at the symbol _start. Make that our wdv_entry,
 	# which runs before clib4's startup code (see src/os4/main.c).
 	$(OBJCOPY) --redefine-sym _start=clib4_crt_start --redefine-sym wdv_entry=_start $@.link $@.debug
@@ -51,8 +73,8 @@ build/os4/webdav-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(wildcard 
 
 prefs: build/os4/wdvprefs
 
-build/os4/wdvprefs: $(PREFS_SRC) $(wildcard src/core/*.h src/os4/*.h)
-	$(CC) $(CFLAGS) -o $@.debug $(PREFS_SRC) $(LDFLAGS) $(LIBS)
+build/os4/wdvprefs: $(PREFS_SRC) $(AMISSL_OBJ) $(wildcard src/core/*.h src/os4/*.h)
+	$(CC) $(CFLAGS) -o $@.debug $(PREFS_SRC) $(AMISSL_OBJ) $(LDFLAGS) $(LIBS)
 	$(STRIP) $(STRIPFLAGS) -o $@ $@.debug
 
 curltest: build/os4/curltest
@@ -62,5 +84,5 @@ build/os4/curltest: tests/os4/curltest.c
 
 curlspeed: build/os4/curlspeed
 
-build/os4/curlspeed: tests/os4/curlspeed.c src/os4/amissl.c
+build/os4/curlspeed: tests/os4/curlspeed.c src/os4/amissl.c $(AMISSL_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)

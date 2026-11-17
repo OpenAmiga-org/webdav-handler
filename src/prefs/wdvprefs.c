@@ -763,6 +763,20 @@ static const char *test_hint(dav_session *d)
 	return "";
 }
 
+/* "amissl_v41x.library 6.1", without the date */
+static const char *amissl_label(void)
+{
+	static char buf[80];
+	size_t n;
+
+	snprintf(buf, sizeof(buf), "%s", amissl_name());
+	n = strcspn(buf, "(\r\n");
+	while (n > 0 && buf[n - 1] == ' ')
+		n--;
+	buf[n] = '\0';
+	return buf[0] != '\0' ? buf : "AmiSSL";
+}
+
 static void test_connection(void)
 {
 	server_cfg s;
@@ -785,7 +799,7 @@ static void test_connection(void)
 	if (g.amissl == 0)
 		g.amissl = amissl_open() == 0 ? 1 : -1;
 	if (g.amissl < 0) {
-		tell("webdav-handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
+		tell("webdav-handler needs AmiSSL 5 or 6 (and a TCP/IP stack).\n"
 		     "AmiSSL: OS4Depot library/misc/amissl.lha");
 		return;
 	}
@@ -853,13 +867,14 @@ static void test_connection(void)
 		         "User: %s\n"
 		         "Contents: %d folder%s, %d file%s\n"
 		         "Free space: %s\n"
+		         "TLS: %s\n"
 		         "Time: %d.%d s",
 		         s.url, dav_root_url(d),
 		         dav_is_nextcloud(d) ? "Nextcloud (file dates and big uploads in parts)" :
 		         s.type == SERVER_TYPE_WEBDAV ? "WebDAV (as chosen)" : "WebDAV (no Nextcloud found)",
 		         s.user[0] != '\0' ? s.user : "(none)", dirs, dirs == 1 ? "" : "s",
 		         files, files == 1 ? "" : "s", free_txt,
-		         (int)((plat_ms() - t0) / 1000), (int)((plat_ms() - t0) / 100 % 10));
+		         amissl_label(), (int)((plat_ms() - t0) / 1000), (int)((plat_ms() - t0) / 100 % 10));
 		if (asked && remember) {
 			snprintf(g.servers.server[g.sel].password, sizeof(s.password), "%s", typed);
 			form_fill();

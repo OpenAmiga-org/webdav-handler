@@ -200,3 +200,29 @@ mounted with a Nextcloud and an Apache server, plus a 0.37 DOSDriver NC0):
 The boot hang was repaired by setting the DOSDriver's Activate to 0
 directly in the stopped guest's disk image (one byte in an FFS data block),
 then removing the test files from the running guest.
+
+## AmiSSL 5 and 6 (2026-11-17, handler 0.42)
+
+Up to 0.41 the handler asked amisslmaster for AMISSL_CURRENT_VERSION of the
+5.27 SDK: AmiSSL 5.25 and older were refused, and AmiSSL 6 alone (only
+amissl_v41x.library) could not be used at all. 0.42 does what sftp-handler
+0.11 does: own AmiSSL stubs (tools/gen_amissl_glue.py) that call through a
+table filled from the AmiSSL 5 (AMISSL_V3xx = 5.1) or AmiSSL 6 (AMISSL_V4xx)
+interface. libcurl 8.21 needs 234 AmiSSL functions; 10 of them are not in
+the AmiSSL 6.1 interface and 1 (SSL_get0_group_name) is not in AmiSSL 5.1
+to 5.12; src/os4/amissl_compat.c stands in for them. BIO_printf (varargs)
+formats with vsnprintf and calls BIO_puts. tools/check_amissl_api.py
+checks all used functions against the 5.1, 5.27 and 6.1 interfaces.
+
+Guest (each run right after a reset, the AmiSSL under test first in LIBS:,
+`tests` = WDV: with an HTTPS Nextcloud and an HTTP Apache server: Dir, a
+5 MB download and upload over HTTPS, a copy to Apache):
+
+| AmiSSL | Opened | Result |
+|---|---|---|
+| 6.1 (installed) | amissl_v41x.library 6.1, AmiSSL 6 interface | tests pass (the host name check runs through the ASN1_STRING_length stand-in); wdvprefs Test connection shows "TLS: amissl_v41x.library 6.1" |
+| 5.25 alone | amissl_v360.library 5.25 | tests pass |
+| 5.1 alone | amissl_v303.library 5.1 | tests pass; curlspeed VERBOSE: "SSL connection using TLSv1.3 / ... / [blank]" (SSL_get0_group_name stand-in), certificate verified |
+
+Not exercised: the MD5, RSA and SRP stand-ins (digest login, client
+certificates and TLS-SRP are not used by the handler).

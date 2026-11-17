@@ -19,6 +19,8 @@ int  req_password(const char *title, const char *text, char *buf, size_t buflen,
 /* amissl.c: 0, -1 (no bsdsocket.library) or -2 (no usable AmiSSL) */
 int  amissl_open(void);
 void amissl_close(void);
+int  amissl_version(void);       /* 5 or 6 while open, else 0 */
+const char *amissl_name(void);   /* IdString of the opened AmiSSL, or "" */
 
 /* platform_os4.c */
 extern int plat_debug_serial;

@@ -8,7 +8,7 @@ email:
 url:
 category: driver/handler
 replaces:
-requirements: clib4.library 2.5, AmiSSL 5, filesysbox.library 54.8
+requirements: clib4.library 2.5, AmiSSL 5.1+ or 6, filesysbox.library 54.8
 license: Public domain
 minosversion: 4.1
 texttype: Plain text
@@ -54,7 +54,7 @@ Requirements (install these first):
 - clib4.library 2.5 or newer:
   OS4Depot development/library/misc/clib4.lha
   or https://github.com/AmigaLabs/clib4/releases
-- AmiSSL 5 or newer:
+- AmiSSL 5 (5.1 or newer) or AmiSSL 6:
   OS4Depot library/misc/amissl.lha
   or https://github.com/jens-maus/amissl/releases
 - A TCP/IP stack (Roadshow, as included in AmigaOS 4.1).
@@ -72,6 +72,9 @@ DOSDrivers of 0.37 and older) and offers to delete the old settings.
 
 History:
 
+- 0.42 (2026-11-17): works with AmiSSL 6 alone and with every AmiSSL 5
+  from 5.1 on (before, it needed AmiSSL 5.27). wdvprefs' Test connection
+  names the AmiSSL used.
 - 0.41 (2026-11-17): Nextcloud Handler is now WebDAV Handler
   (webdav-handler, device WDV:, volume WebDAV:, prefs wdvprefs); any WebDAV
   server works and Nextcloud servers keep their extras. A Type for every
