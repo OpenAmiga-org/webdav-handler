@@ -8,8 +8,9 @@ On Nextcloud servers it also keeps file dates and uploads big files in
 parts. Built on filesysbox.library, clib4, libcurl and AmiSSL.
 
 Up to 0.39 it was called Nextcloud Handler (`nextcloud-handler`, device
-`NCH:`, `nchprefs`); the repository keeps its old name. wdvprefs and the
-Install script take an installation of it over.
+`NCH:`, `nchprefs`); the repository was `orgin/nextcloud_client` until
+2026-11-17 (GitHub forwards the old address). wdvprefs and the Install
+script take an installation of it over.
 
 End-user documentation: `package/WebDAVHandler/WebDAVHandler.guide`.
 Release archive: `tools/make_lha.sh` -> `dist/WebDAVHandler.lha`.

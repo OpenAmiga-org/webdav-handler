@@ -604,7 +604,7 @@ time.
 @{b}Licence and credits@{ub}
 
 webdav-handler is public domain (see LICENSE.txt). Source code:
-https://github.com/orgin/nextcloud_client
+https://github.com/orgin/webdav-handler
 
 It is built with these libraries, which have their own licences (see
 Third-party.txt):
