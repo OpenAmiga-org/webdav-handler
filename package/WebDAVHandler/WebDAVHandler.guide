@@ -1,5 +1,5 @@
 @database WebDAVHandler.guide
-@$VER: WebDAVHandler.guide 0.42 (17.11.2026)
+@$VER: WebDAVHandler.guide 0.43 (18.11.2026)
 @author orgin
 @wordwrap
 @font topaz.font 8
@@ -522,10 +522,20 @@ time.
    A DOSDriver of Nextcloud Handler 0.37 or older is mounted with the new
    handler, see @{"From Nextcloud Handler" link Upgrade}.
 
-@{b}"Object is in use" while reading a file@{ub}
-   The file was changed on the server while it was being read. The read
-   stops instead of mixing the old and the new version; copy the file
-   again.
+@{b}"Object is in use"@{ub}
+   While reading: the file was changed on the server while it was being
+   read. The read stops instead of mixing the old and the new version;
+   copy the file again. Otherwise the file is locked on the server (for
+   example while another program edits it).
+
+@{b}"File is write protected"@{ub}
+   The server does not allow the change, for example in a folder that
+   was shared with you read-only.
+
+@{b}"Error -1"@{ub}
+   The server answered with an error that AmigaOS has no message for
+   (an internal server error, for example). Add DEBUG to the Startup
+   line to see the server's answer in the debug log.
 
 @{b}"Upload failed" requester@{ub}
    A file could not be saved on the server (network gone, server full,
@@ -548,6 +558,12 @@ time.
 
 @node History "History"
 @{b}History@{ub}
+
+@{b}0.43 (18.11.2026)@{ub}
+   - Clearer messages for some server answers: a change the server does
+     not allow (a read-only share) shows "file is write protected", a
+     file locked on the server "object is in use", a file too big for
+     the server "disk is full". Before, these showed "Error -1".
 
 @{b}0.42 (17.11.2026)@{ub}
    - Works with AmiSSL 6 alone and with every AmiSSL 5 from 5.1 on.

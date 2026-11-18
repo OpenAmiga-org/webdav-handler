@@ -226,3 +226,27 @@ Guest (each run right after a reset, the AmiSSL under test first in LIBS:,
 
 Not exercised: the MD5, RSA and SRP stand-ins (digest login, client
 certificates and TLS-SRP are not used by the handler).
+
+## Error messages (2026-11-18, handler 0.43)
+
+`testserver/errsim.py` is a fake WebDAV server whose drawers answer every
+change or read with one HTTP status (403, 500, 503, 507, 423). Linux:
+403 -> EACCES, 500/503 -> EIO, 507 -> ENOSPC, 423 -> EBUSY. In the guest,
+most of these showed AmigaDOS "Error -1".
+
+filesysbox 54.9's errno -> message table on AmigaOS 4 (clib4 numbers),
+measured with a throwaway build that returned errno N for "MakeDir
+.../errnoN": 2 object not found, 7 wrong number of arguments, 12 not
+enough memory, 15/20/21/25 object is not of required type, 17 object
+already exists, 19 no disk in drive, 22 bad number, 26 object is in use,
+28 disk is full, 29 seek failure, 30 file is write protected,
+45/78/89 packet request type unknown, 66 directory not empty. All other
+values from 1 to 95 (EPERM, EIO, EACCES, EBUSY, EFBIG, ETIMEDOUT, EPROTO,
+...) give "Error -1"; none gives "read protected".
+
+0.43 (src/os4/fbxglue.c): EBUSY -> ETXTBSY ("object is in use"), EFBIG
+-> ENOSPC ("disk is full"), and for changes EACCES/EPERM -> EROFS ("file
+is write protected"). Checked in the guest: 403 MakeDir/Delete/Rename/
+FileNote -> "file is write protected"; 423 -> "object is in use" (also for
+reads); 500 stays "Error -1" (no fitting message). Type does not print
+read errors at all (AmigaDOS Type); Copy does.

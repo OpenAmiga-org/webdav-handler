@@ -59,16 +59,33 @@ static void strcopy(char *dst, const char *src, uint32 size)
 	dst[i] = '\0';
 }
 
+/* filesysbox 54.9 shows "Error -1" for many errno values (EPERM, EIO,
+ * EACCES, EBUSY, EFBIG, ...; the whole table is in docs/deep_test_plan.md);
+ * these give the nearest AmigaDOS errors instead */
 static int fbxerr(int err)
 {
-	if (err == -ENODATA)
+	switch (-err) {
+	case ENODATA:
 		return -NEWLIB_ENODATA;
-	if (err == -ENOTSUP)
+	case ENOTSUP:
 		return -NEWLIB_EOPNOTSUPP;
-	/* from one server to another: filesysbox would show "Error -1" */
-	if (err == -EXDEV)
-		return -NEWLIB_EOPNOTSUPP;
+	case EXDEV:          /* from one server to another */
+		return -NEWLIB_EOPNOTSUPP;  /* "packet request type unknown" */
+	case EBUSY:          /* locked on the server (HTTP 423) */
+		return -ETXTBSY;            /* "object is in use" */
+	case EFBIG:          /* too big for the server (HTTP 413) */
+		return -ENOSPC;             /* "disk is full" */
+	}
 	return err;
+}
+
+/* for changes, the server's "not allowed" (HTTP 401/403: a read-only
+ * share, for example) reads best as write-protected */
+static int fbxerr_change(int err)
+{
+	if (err == -EACCES || err == -EPERM)
+		return -EROFS;              /* "file is write protected" */
+	return fbxerr(err);
 }
 
 static void rpc_init(struct rpc *r, int op, const char *path)
@@ -203,7 +220,7 @@ static int nc_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	err = rpc_call(&r);
 	if (err == 0)
 		fi->fh = (long long)(uint32)r.fh;
-	return fbxerr(err);
+	return fbxerr_change(err);
 }
 
 static int nc_read(const char *path, char *buf, size_t size, fbx_off_t off,
@@ -229,7 +246,7 @@ static int nc_write(const char *path, const char *buf, size_t size, fbx_off_t of
 	r.cbuf = buf;
 	r.size = size;
 	r.off = off;
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static int fh_op(int op, const char *path, struct fuse_file_info *fi)
@@ -258,7 +275,7 @@ static int nc_truncate(const char *path, fbx_off_t size)
 
 	rpc_init(&r, OP_TRUNCATE, path);
 	r.off = size;
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static int nc_ftruncate(const char *path, fbx_off_t size, struct fuse_file_info *fi)
@@ -268,7 +285,7 @@ static int nc_ftruncate(const char *path, fbx_off_t size, struct fuse_file_info 
 	rpc_init(&r, OP_FTRUNCATE, path);
 	r.fh = FH(fi);
 	r.off = size;
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static int path_op(int op, const char *path)
@@ -276,7 +293,7 @@ static int path_op(int op, const char *path)
 	struct rpc r;
 
 	rpc_init(&r, op, path);
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static int nc_mkdir(const char *path, mode_t mode)
@@ -301,7 +318,7 @@ static int nc_rename(const char *from, const char *to)
 
 	rpc_init(&r, OP_RENAME, from);
 	r.path2 = to;
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static int nc_utimens(const char *path, const struct timespec tv[2])
@@ -310,7 +327,7 @@ static int nc_utimens(const char *path, const struct timespec tv[2])
 
 	rpc_init(&r, OP_UTIMENS, path);
 	r.mtime = (time_t)tv[1].tv_sec;
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static int nc_chmod(const char *path, mode_t mode)
@@ -388,7 +405,7 @@ static int nc_setxattr(const char *path, const char *name, const char *value,
 	buf[size] = '\0';
 	rpc_init(&r, OP_SETCOMMENT, path);
 	r.cbuf = buf;
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static int nc_removexattr(const char *path, const char *name)
@@ -399,7 +416,7 @@ static int nc_removexattr(const char *path, const char *name)
 		return 0;
 	rpc_init(&r, OP_SETCOMMENT, path);
 	r.cbuf = NULL;
-	return fbxerr(rpc_call(&r));
+	return fbxerr_change(rpc_call(&r));
 }
 
 static struct fuse_operations nc_ops = {

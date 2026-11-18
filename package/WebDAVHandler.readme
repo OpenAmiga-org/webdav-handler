@@ -72,6 +72,10 @@ DOSDrivers of 0.37 and older) and offers to delete the old settings.
 
 History:
 
+- 0.43 (2026-11-18): clearer messages for some server answers: "file is
+  write protected" for changes the server does not allow (read-only
+  shares), "object is in use" for locked files, "disk is full" for files
+  too big for the server (they showed "Error -1").
 - 0.42 (2026-11-17): works with AmiSSL 6 alone and with every AmiSSL 5
   from 5.1 on (before, it needed AmiSSL 5.27). wdvprefs' Test connection
   names the AmiSSL used.
