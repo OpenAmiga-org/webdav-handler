@@ -30,8 +30,7 @@ files in parts.
 Nextcloud and Apache in an emulated AmigaOne only. Please try it with
 your own servers and on real hardware, and report what does not work
 (which server, what you did, what happened; the guide explains how to
-get a debug log). Bug reports are welcome as comments on this OS4Depot
-page.
+get a debug log).
 
 webdav-handler is an [OpenAmiga.org project](http://openamiga.org/?function=gitproject&name=webdav-handler).
 The source code, test versions and bug reports are at
