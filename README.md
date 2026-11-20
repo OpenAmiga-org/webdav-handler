@@ -1,19 +1,21 @@
-# webdav-handler (WebDAV Handler)
+# webdav-handler
 
 An AmigaOS 4 filesystem handler that shows WebDAV servers on one volume,
 `WebDAV:` (device `WDV:`): every server in the server list is a drawer,
-connected when it is first used. The server list
-(`ENV:WebDAVHandler/servers.xml`) is kept by the prefs program `wdvprefs`.
-On Nextcloud servers it also keeps file dates and uploads big files in
-parts. Built on filesysbox.library, clib4, libcurl and AmiSSL.
+connected when it is first used. On Nextcloud servers it also keeps file
+dates and uploads big files in parts. webdav-handler is an
+[OpenAmiga.org project](http://openamiga.org/?function=gitproject&name=webdav-handler).
 
-Up to 0.39 it was called Nextcloud Handler (`nextcloud-handler`, device
-`NCH:`, `nchprefs`); the repository was `orgin/nextcloud_client` until
-2026-11-17 (GitHub forwards the old address). wdvprefs and the Install
+The server list (`ENV:WebDAVHandler/servers.xml`) is kept by the prefs
+program `wdvprefs`. Up to 0.39 it was called Nextcloud Handler
+(`nextcloud-handler`, device `NCH:`, `nchprefs`); wdvprefs and the Install
 script take an installation of it over.
 
-End-user documentation: `package/WebDAVHandler/WebDAVHandler.guide`.
-Release archive: `tools/make_lha.sh` -> `dist/WebDAVHandler.lha`.
+Built on filesysbox.library, clib4, libcurl and AmiSSL.
+
+Download: not on OS4Depot yet (`tools/make_lha.sh` makes
+`dist/WebDAVHandler.lha`: handler, wdvprefs, DOSDriver, Install script and
+guide).
 
 ## Layout
 
@@ -31,8 +33,14 @@ Release archive: `tools/make_lha.sh` -> `dist/WebDAVHandler.lha`.
                 plain WebDAV server, Apache mod_dav (`webdav.sh`)
 - `package/`    files of the release archive (guide, Install script, DOSDriver,
                 readme, icons)
-- `tools/`      build scripts (see below), icon tools
+- `tools/`      build scripts (see below), icon tools, `update_readme.py`
+                (the changelog below, from the readme)
 - `docs/`       notes, including the review of openamiga project 63
+
+## Using it
+
+The end-user documentation is `package/WebDAVHandler/WebDAVHandler.guide`;
+the OS4Depot readme is `package/WebDAVHandler.readme`.
 
 ## Building
 
@@ -106,4 +114,37 @@ The OS4 build needs the cross-compiler image
   `tests/os4/` (nchtest, nametest, gentree, scripts in `deep/`) and
   `tests/hostmount.sh` to check the server side from Linux.
 
-Public domain, see `UNLICENSE`.
+## Changelog
+
+<!-- changelog start: made by tools/update_readme.py from package/WebDAVHandler.readme -->
+- **0.43** (2026-11-18): Clearer messages for some server answers: "file is write protected" for changes the server does not allow (read-only shares), "object is in use" for locked files, "disk is full" for files too big for the server (they showed "Error -1").
+- **0.42** (2026-11-17): Works with AmiSSL 6 alone and with every AmiSSL 5 from 5.1 on (before, it needed AmiSSL 5.27). wdvprefs' Test connection names the AmiSSL used.
+- **0.41** (2026-11-17):
+  - Nextcloud Handler is now WebDAV Handler (`webdav-handler`, device `WDV:`, volume `WebDAV:`, prefs program wdvprefs); any WebDAV server works and Nextcloud servers keep their extras.
+  - A Type for every server (Automatic, Nextcloud, WebDAV).
+  - Install removes Nextcloud Handler on request and wdvprefs takes its servers over.
+  - AmigaOS 4.1 style icons and a volume icon for `WDV:`.
+  - Setting a date on a server that cannot keep it is accepted without effect. Reading files with a weak ETag works.
+  - With clib4.library older than 2.5 the handler shows a requester instead of stopping the boot.
+- **0.39** (2026-11-17):
+  - Nextcloud Handler: one device, `NCH:`, for all servers: every server is a drawer, connected when it is first used. The new prefs program nchprefs keeps the server list (with "Test connection") and takes over the servers of the old DOSDrivers.
+  - Remembered passwords go into the server list. The character set of file names comes from `ENV:Charset` when CHARSET is not given. Long server messages are broken into lines in requesters.
+- **0.37** (2026-11-15): Nextcloud Handler: converting an empty text between the Amiga character set and UTF-8 could give leftover memory instead of an empty text (no case is known where the handler showed it).
+- **0.32** (2026-11-15):
+  - Nextcloud Handler: reading stops with an error when the file is changed on the server during the read, instead of giving a mix of both versions.
+  - The handler's code is freed when the volume is dismounted (about 3 MB were lost with every mount). Problems that need the user, such as certificate errors, are shown in a requester once.
+  - Names with ":" from the server can be used (shown as `%u003A`). Files show the e bit, so programs on the volume can be started. Line breaks in requesters are shown correctly. Files over 2 GiB can be written with TEMPDIR on an FFS partition.
+- **0.25** (2026-11-15): Nextcloud Handler: first test version.
+<!-- changelog end -->
+
+## History
+
+Started in November 2026 as Nextcloud Handler (`orgin/nextcloud_client`)
+by Björn Hagström with Claude, first test version 0.25 on 15.11.2026.
+Renamed to webdav-handler with 0.41 (17.11.2026), when it became a
+handler for any WebDAV server, and moved to the OpenAmiga-org GitHub
+organization in November 2026 (GitHub forwards the old addresses).
+
+Public domain, see `UNLICENSE` (The Unlicense). The handler contains
+libcurl, Expat, zlib and parts of clib4 under their own licences
+(`Third-party.txt` in the archive).

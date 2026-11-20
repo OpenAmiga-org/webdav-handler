@@ -29,7 +29,7 @@ VH="$ROOT/src/os4/version.h"
 
 ver=$(sed -n 's/^#define WDV_VERSION  *\([0-9]*\)/\1/p' "$VH").$(sed -n 's/^#define WDV_REVISION \([0-9]*\)/\1/p' "$VH")
 amigadate=$(sed -n 's/^#define WDV_DATE *"\(.*\)"/\1/p' "$VH")
-isodate=$(date +%Y%m%d)
+isodate=$(date +%d.%m.%Y)   # the readme date, DD.MM.YYYY
 bin="$ROOT/build/os4/webdav-handler"
 prefs="$ROOT/build/os4/wdvprefs"
 
@@ -44,14 +44,17 @@ fi
 
 # every release says what changed: the readme and the guide need an entry
 # for this version
-if ! grep -q "^- $ver (" "$ROOT/package/WebDAVHandler.readme"; then
-	echo "package/WebDAVHandler.readme has no History entry \"- $ver (...)\"" >&2
+if ! grep -q "^### $ver[ (]" "$ROOT/package/WebDAVHandler.readme"; then
+	echo "package/WebDAVHandler.readme has no History entry \"### $ver (...)\"" >&2
 	exit 1
 fi
 if ! grep -q "^@{b}$ver (" "$ROOT/package/WebDAVHandler/WebDAVHandler.guide"; then
 	echo "WebDAVHandler.guide has no History entry for $ver" >&2
 	exit 1
 fi
+
+# README.md's Changelog comes from the readme's History
+python3 -I "$ROOT/tools/update_readme.py"
 
 rm -rf "$STAGE"
 D="$STAGE/WebDAVHandler"
@@ -64,8 +67,9 @@ cp "$ROOT/package/WebDAVHandler/Devs/DOSDrivers/WDV" "$D/Devs/DOSDrivers/"
 sed -e "s/^@\$VER: WebDAVHandler.guide [0-9.]* ([0-9.]*)/@\$VER: WebDAVHandler.guide $ver ($amigadate)/" \
 	"$ROOT/package/WebDAVHandler/WebDAVHandler.guide" > "$D/WebDAVHandler.guide"
 cp "$ROOT/UNLICENSE" "$D/LICENSE.txt"
+# the archive copy in ISO-8859-1 (OS4Depot and Amiga programs)
 sed -e "s/@VERSION@/$ver/" -e "s/@DATE@/$isodate/" \
-	"$ROOT/package/WebDAVHandler.readme" > "$STAGE/WebDAVHandler.readme"
+	"$ROOT/package/WebDAVHandler.readme" | iconv -f UTF-8 -t ISO-8859-1 > "$STAGE/WebDAVHandler.readme"
 
 {
 	echo "webdav-handler is public domain (LICENSE.txt). The handler binary"
