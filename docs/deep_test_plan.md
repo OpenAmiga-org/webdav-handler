@@ -250,3 +250,15 @@ is write protected"). Checked in the guest: 403 MakeDir/Delete/Rename/
 FileNote -> "file is write protected"; 423 -> "object is in use" (also for
 reads); 500 stays "Error -1" (no fitting message). Type does not print
 read errors at all (AmigaDOS Type); Copy does.
+
+## AmigaOS 4.1 FE Update 3 Kickstart (2026-11-20, handler 0.43)
+
+The guest now boots the Update 3 Kickstart (kernel 54.57, newlib 53.87,
+elf.library 54.5); filesysbox is still 54.9. The update put AmiSSL 5.25
+back as the system's AmiSSL (LIBS:amisslmaster.library 5.25;
+LIBS:AmiSSL has v360, v362 and v41x).
+
+| Run (after a reset) | Opened | Result |
+|---|---|---|
+| System as installed | amissl_v360.library 5.25 (AmiSSL 5 interface) | WDV: with Nextcloud (HTTPS) and Apache (HTTP): listing, 5 MB down and up over HTTPS, copy to Apache, FileNote; nchtest 240/240; functional.script |
+| amisslmaster 6.1 first in LIBS: | amissl_v41x.library 6.1 (AmiSSL 6 interface) | the same tests pass, nchtest 240/240; wdvprefs Test connection: "TLS: amissl_v41x.library 6.1" |
